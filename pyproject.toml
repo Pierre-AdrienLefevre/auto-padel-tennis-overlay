@@ -1,11 +1,14 @@
 [project]
 name = "automatisation-overlay-point"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.8.0"
+description = "Padel Video Overlay Generator - Application de génération automatique d'overlays de score pour vidéos de padel"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "lxml>=6.0.2",
     "openpyxl>=3.1.5",
     "pillow>=11.3.0",
+    "pyinstaller>=6.16.0",
+    "pyqt6>=6.9.1",
+    "requests>=2.32.5",
 ]

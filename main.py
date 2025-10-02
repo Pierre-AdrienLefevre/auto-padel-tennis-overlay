@@ -4,15 +4,17 @@ Automatisation de l'ajout d'overlays de score sur des vidéos de padel.
 Lit un XML Premiere Pro et un fichier Excel avec les scores.
 """
 
-import xml.etree.ElementTree as ET
-import openpyxl
-from pathlib import Path
+import logging
+import platform
 import subprocess
 import tempfile
 import time
-import platform
-import logging
+import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+import openpyxl
+
 from overlay_generator import PadelOverlayGenerator
 
 
@@ -385,9 +387,7 @@ class VideoOverlayAutomator:
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
 
-            # Traitement parallèle des segments (optimal pour RTX 5070)
-            # Note: RTX 5070 a ~2-3 encodeurs NVENC, plus de workers = contention
-            max_workers = 3
+            max_workers = 4
             print(f"\n🚀 Traitement parallèle activé ({max_workers} workers)")
 
             segments_data = []
