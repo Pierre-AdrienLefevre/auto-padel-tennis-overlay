@@ -4,7 +4,7 @@ Module de génération d'overlays de score pour vidéos de padel/tennis.
 Style basé sur l'exemple Overlay_précis2.png
 """
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from pathlib import Path
 
 
@@ -22,46 +22,73 @@ class PadelOverlayGenerator:
         self.width = width
         self.height = height
 
-        # Couleurs (basées sur l'exemple)
-        self.color_bg_teams = (30, 58, 87, 255)      # Bleu marine foncé
-        self.color_bg_games = (200, 200, 200, 255)   # Gris clair
+        # Couleurs (basées sur les exemples précis)
+        self.color_bg_teams = (37, 66, 94, 255)      # Bleu marine (plus proche des exemples)
+        self.color_bg_games = (210, 210, 210, 255)   # Gris clair
+        self.color_bg_points = (54, 79, 107, 255)    # Bleu marine légèrement plus clair pour points
         self.color_text_white = (255, 255, 255, 255) # Blanc
         self.color_text_black = (0, 0, 0, 255)       # Noir
-        self.color_separator = (255, 255, 255, 200)  # Blanc semi-transparent
+        self.color_separator = (255, 255, 255, 180)  # Blanc semi-transparent
+        self.color_shadow = (0, 0, 0, 100)           # Ombre noire semi-transparente
 
-        # Dimensions du scoreboard (pour 4K, x2 des valeurs 1080p)
-        self.x_offset = 200  # Distance du bord gauche
-        self.y_offset_from_bottom = 10  # Distance du bord du bas (bord bas de l'overlay)
-        self.total_width = 2400  # Largeur totale de l'overlay
-        self.total_height = 500  # Hauteur totale
+        # Dimensions du scoreboard (pour 4K, basé sur les exemples)
+        self.x_offset = 50  # Distance du bord gauche (plus près du bord)
+        self.y_offset_from_bottom = 250  # Distance du bord du bas
+        self.total_height = 400  # Hauteur totale réduite
 
         # Hauteur de chaque ligne
-        self.row_height = 250
+        self.row_height = 200
 
-        # Largeurs des colonnes (x2 pour 4K)
-        self.names_width = 560
-        self.games_width = 200
-        self.points_width = 200
-        self.set_width = 160  # Largeur pour les colonnes de sets
+        # Largeurs des colonnes (x2 pour 4K, ajustées selon exemples)
+        self.names_width = 1100  # Plus large pour les noms
+        self.games_width = 350   # Plus large pour les jeux
+        self.points_width = 400  # Plus large pour les points
+        self.set_width = 350     # Largeur pour les colonnes de sets
 
-        self.border_radius = 30
-        self.spacing = 16  # Espacement entre les sections
+        self.border_radius = 50  # Coins plus arrondis
+        self.spacing = 30  # Espacement plus large entre les sections
+
+        # Ombre portée
+        self.shadow_offset = 8
+        self.shadow_blur = 15
 
     def load_fonts(self):
-        """Charge les polices système."""
-        try:
-            # Police pour les noms d'équipes (x2 pour 4K)
-            font_team = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 44)
-            # Police pour les jeux (chiffres noirs, x2 pour 4K)
-            font_games = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 90)
-            # Police pour les points (chiffres blancs, x2 pour 4K)
-            font_points = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 84)
+        """Charge les polices système (avec fallback multi-plateforme)."""
+        # Liste de polices bold à essayer (ordre de préférence)
+        font_paths_bold = [
+            # Windows
+            "C:/Windows/Fonts/arialbd.ttf",  # Arial Bold
+            "C:/Windows/Fonts/calibrib.ttf",  # Calibri Bold
+            # macOS
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/SFNSDisplay-Bold.ttf",
+            # Linux
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ]
 
-            return font_team, font_games, font_points
-        except Exception:
-            # Fallback sur police par défaut
+        font_team = None
+        font_games = None
+        font_points = None
+
+        # Essayer de charger les polices
+        for font_path in font_paths_bold:
+            try:
+                # Police pour les noms d'équipes (taille augmentée, bold)
+                font_team = ImageFont.truetype(font_path, 70)
+                # Police pour les jeux (chiffres noirs, plus gros, bold)
+                font_games = ImageFont.truetype(font_path, 140)
+                # Police pour les points (chiffres blancs, très gros, bold)
+                font_points = ImageFont.truetype(font_path, 130)
+                break
+            except Exception:
+                continue
+
+        # Fallback si aucune police trouvée
+        if not font_team:
             default = ImageFont.load_default()
-            return default, default, default
+            font_team = font_games = font_points = default
+
+        return font_team, font_games, font_points
 
     def parse_score(self, jeux_str, points_str):
         """
@@ -91,6 +118,32 @@ class PadelOverlayGenerator:
             points_eq1, points_eq2 = "0", "0"
 
         return jeux_eq1, jeux_eq2, points_eq1, points_eq2
+
+    def draw_rounded_rectangle_with_shadow(self, draw, bounds, radius, fill, shadow_img):
+        """Dessine un rectangle arrondi avec ombre portée."""
+        # bounds est [(x1, y1), (x2, y2)]
+        x1, y1 = bounds[0]
+        x2, y2 = bounds[1]
+
+        # Créer une couche pour l'ombre
+        shadow_layer = Image.new('RGBA', (x2 - x1 + 40, y2 - y1 + 40), (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow_layer)
+
+        # Dessiner l'ombre (décalée)
+        shadow_draw.rounded_rectangle(
+            [(20, 20), (x2 - x1 + 20, y2 - y1 + 20)],
+            radius=radius,
+            fill=self.color_shadow
+        )
+
+        # Appliquer un flou gaussien à l'ombre
+        shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(self.shadow_blur))
+
+        # Coller l'ombre sur l'image principale
+        shadow_img.paste(shadow_layer, (x1 - 20 + self.shadow_offset, y1 - 20 + self.shadow_offset), shadow_layer)
+
+        # Dessiner le rectangle principal par-dessus
+        draw.rounded_rectangle(bounds, radius=radius, fill=fill)
 
     def create_overlay(self,
                       team1_names="LÉO / YANNOUCK",
@@ -132,11 +185,13 @@ class PadelOverlayGenerator:
 
         # === SECTION 1: NOMS DES ÉQUIPES (fond bleu marine) ===
         x_names = x_start
-        draw.rounded_rectangle(
+        self.draw_rounded_rectangle_with_shadow(
+            draw,
             [(x_names, y_start),
              (x_names + self.names_width, y_start + total_height)],
             radius=self.border_radius,
-            fill=self.color_bg_teams
+            fill=self.color_bg_teams,
+            shadow_img=img
         )
 
         # Position courante pour les sections suivantes
@@ -148,40 +203,48 @@ class PadelOverlayGenerator:
 
         if set1:
             x_set1 = x_current
-            draw.rounded_rectangle(
+            self.draw_rounded_rectangle_with_shadow(
+                draw,
                 [(x_set1, y_start),
                  (x_set1 + self.set_width, y_start + total_height)],
                 radius=self.border_radius,
-                fill=self.color_bg_teams
+                fill=self.color_bg_teams,
+                shadow_img=img
             )
             x_current = x_set1 + self.set_width + self.spacing
 
         if set2:
             x_set2 = x_current
-            draw.rounded_rectangle(
+            self.draw_rounded_rectangle_with_shadow(
+                draw,
                 [(x_set2, y_start),
                  (x_set2 + self.set_width, y_start + total_height)],
                 radius=self.border_radius,
-                fill=self.color_bg_teams
+                fill=self.color_bg_teams,
+                shadow_img=img
             )
             x_current = x_set2 + self.set_width + self.spacing
 
         # === JEUX DU SET EN COURS (fond gris clair) ===
         x_games = x_current
-        draw.rounded_rectangle(
+        self.draw_rounded_rectangle_with_shadow(
+            draw,
             [(x_games, y_start),
              (x_games + self.games_width, y_start + total_height)],
             radius=self.border_radius,
-            fill=self.color_bg_games
+            fill=self.color_bg_games,
+            shadow_img=img
         )
 
         # === POINTS (fond bleu marine) ===
         x_points = x_games + self.games_width + self.spacing
-        draw.rounded_rectangle(
+        self.draw_rounded_rectangle_with_shadow(
+            draw,
             [(x_points, y_start),
              (x_points + self.points_width, y_start + total_height)],
             radius=self.border_radius,
-            fill=self.color_bg_teams
+            fill=self.color_bg_points,
+            shadow_img=img
         )
 
         # === LIGNES DE SÉPARATION HORIZONTALES ===
@@ -366,7 +429,7 @@ def generate_padel_overlay(jeux, points,
 # Test si exécuté directement
 if __name__ == "__main__":
     # Exemple de test
-    print("🎾 Test du générateur d'overlay Padel")
+    print("Test du generateur d'overlay Padel")
 
     generator = PadelOverlayGenerator()
 
@@ -378,11 +441,11 @@ if __name__ == "__main__":
         points="40/30"
     )
     generator.save_overlay(overlay, "test_overlay_simple.png")
-    print("✅ Test 1: test_overlay_simple.png")
+    print("OK Test 1: test_overlay_simple.png")
 
     # Test 2: overlay avec 2 sets
     overlay2 = generator.create_overlay(
-        team1_names="LÉO / YANNOUCK",
+        team1_names="LEO / YANNOUCK",
         team2_names="PIERRE / BILAL",
         jeux="5/7",
         points="0/15",
@@ -390,4 +453,4 @@ if __name__ == "__main__":
         set2="1/0"
     )
     generator.save_overlay(overlay2, "test_overlay_2sets.png")
-    print("✅ Test 2: test_overlay_2sets.png")
+    print("OK Test 2: test_overlay_2sets.png")

@@ -11,12 +11,15 @@ import subprocess
 import tempfile
 import time
 import platform
+import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from overlay_generator import PadelOverlayGenerator
 
 
 class VideoOverlayAutomator:
     def __init__(self, xml_path, excel_path, video_folder=".",
-                 team1_names="LÉO / YANNOUCK", team2_names="BILAL / PIERRE"):
+                 team1_names="LÉO / YANNOUCK", team2_names="BILAL / PIERRE",
+                 debug=False):
         self.xml_path = Path(xml_path)
         self.excel_path = Path(excel_path)
         self.video_folder = Path(video_folder)
@@ -27,6 +30,30 @@ class VideoOverlayAutomator:
         self.overlay_generator = PadelOverlayGenerator()
         self.team1_names = team1_names
         self.team2_names = team2_names
+        self.debug = debug
+
+        # Configurer le logging
+        if self.debug:
+            # Créer le dossier logs s'il n'existe pas
+            log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
+
+            # Nom du fichier log avec timestamp
+            log_file = log_dir / f"video_processing_{time.strftime('%Y%m%d_%H%M%S')}.log"
+
+            # Configuration du logging (fichier + console)
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format='[%(asctime)s] %(levelname)s: %(message)s',
+                datefmt='%H:%M:%S',
+                handlers=[
+                    logging.FileHandler(log_file, encoding='utf-8'),
+                    logging.StreamHandler()  # Affiche aussi dans la console
+                ]
+            )
+            print(f"📝 Mode debug activé - Logs sauvegardés dans: {log_file}")
+        else:
+            logging.basicConfig(level=logging.WARNING)
 
     def detect_gpu_encoder(self):
         """Détecte le meilleur encodeur GPU disponible selon la plateforme."""
@@ -204,6 +231,138 @@ class VideoOverlayAutomator:
         else:
             return f"{secs}s"
 
+    def process_single_segment(self, i, clip, score, temp_path, original_bitrate, total_clips):
+        """Traite un seul segment vidéo (pour parallélisation)."""
+        segment_start_time = time.time()
+        timings = {}
+
+        print(f"\n[{i}/{total_clips}] Processing clip: {clip['name']}")
+        logging.debug(f"Segment {i}: Début du traitement")
+
+        # Trouver le fichier vidéo source
+        t0 = time.time()
+        try:
+            video_file = self.find_video_file(clip['name'])
+        except FileNotFoundError as e:
+            print(f"⚠️  {e}, skipping...")
+            return None
+        timings['find_file'] = time.time() - t0
+        logging.debug(f"Segment {i}: Fichier trouvé en {timings['find_file']:.3f}s")
+
+        # Calculer les timestamps
+        t0 = time.time()
+        start_time = self.frames_to_seconds(clip['in_frame'])
+        duration = self.frames_to_seconds(clip['duration_frames'])
+        timings['calc_timestamps'] = time.time() - t0
+
+        print(f"   Start: {start_time:.2f}s, Duration: {duration:.2f}s")
+
+        # Déterminer quels sets afficher
+        t0 = time.time()
+        display_set1 = score['set1'] if score['set1'] and score['set1'] != score['jeux'] else None
+        display_set2 = score['set2'] if score['set2'] and score['set2'] != score['jeux'] else None
+        timings['calc_scores'] = time.time() - t0
+
+        print(f"   Set1: {display_set1} | Set2: {display_set2} | Jeux: {score['jeux']} | Points: {score['points']}")
+
+        # Créer l'overlay
+        t0 = time.time()
+        overlay_img = self.overlay_generator.create_overlay(
+            team1_names=self.team1_names,
+            team2_names=self.team2_names,
+            jeux=score['jeux'],
+            points=score['points'],
+            set1=display_set1,
+            set2=display_set2
+        )
+        overlay_path = temp_path / f"overlay_{i:03d}.png"
+        self.overlay_generator.save_overlay(overlay_img, str(overlay_path))
+        timings['create_overlay'] = time.time() - t0
+        logging.debug(f"Segment {i}: Overlay créé en {timings['create_overlay']:.3f}s")
+
+        # Créer le segment avec overlay
+        segment_path = temp_path / f"segment_{i:03d}.mp4"
+
+        # Construire la commande FFmpeg
+        t0 = time.time()
+        ffmpeg_cmd = [
+            'ffmpeg',
+            '-hwaccel', 'cuda',
+            '-hwaccel_output_format', 'cuda',
+            '-ss', str(start_time),
+            '-i', video_file,
+            '-i', str(overlay_path),
+            '-filter_complex', '[0:v]hwdownload,format=nv12[base];[base][1:v]overlay=0:0,format=nv12,hwupload_cuda[out]',
+            '-map', '[out]',
+            '-t', str(duration),
+            '-c:v', self.encoder['video_codec']
+        ]
+
+        if self.encoder['preset']:
+            ffmpeg_cmd.extend(['-preset', self.encoder['preset']])
+
+        if self.encoder['crf']:
+            ffmpeg_cmd.extend(['-crf', self.encoder['crf']])
+
+        # Utiliser le bitrate original si détecté
+        if original_bitrate and self.encoder['video_codec'] == 'hevc_nvenc':
+            custom_params = []
+            for j, param in enumerate(self.encoder['extra_params']):
+                if param == '-b:v':
+                    custom_params.extend(['-b:v', f'{int(original_bitrate)}M'])
+                    continue
+                elif param == '-maxrate:v':
+                    custom_params.extend(['-maxrate:v', f'{int(original_bitrate * 1.2)}M'])
+                    continue
+                elif param == '-bufsize:v':
+                    custom_params.extend(['-bufsize:v', f'{int(original_bitrate * 2)}M'])
+                    continue
+                if j > 0 and self.encoder['extra_params'][j-1] in ['-b:v', '-maxrate:v', '-bufsize:v']:
+                    continue
+                custom_params.append(param)
+            ffmpeg_cmd.extend(custom_params)
+        else:
+            ffmpeg_cmd.extend(self.encoder['extra_params'])
+
+        # Audio: copier si déjà en AAC, sinon réencoder
+        ffmpeg_cmd.extend([
+            '-c:a', 'copy',  # Copie l'audio (pas de réencodage)
+            '-y',
+            str(segment_path)
+        ])
+
+        timings['build_cmd'] = time.time() - t0
+
+        print(f"   Running FFmpeg ({self.encoder['video_codec']})...")
+        logging.debug(f"Segment {i}: Commande FFmpeg: {' '.join(ffmpeg_cmd)}")
+
+        t0 = time.time()
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        timings['ffmpeg_execution'] = time.time() - t0
+        logging.debug(f"Segment {i}: FFmpeg exécuté en {timings['ffmpeg_execution']:.3f}s")
+
+        if result.returncode != 0:
+            print(f"   ❌ FFmpeg error: {result.stderr}")
+            logging.error(f"Segment {i}: Erreur FFmpeg: {result.stderr}")
+            return None
+
+        segment_elapsed = time.time() - segment_start_time
+        print(f"   ✅ Segment créé en {self.format_time(segment_elapsed)}")
+
+        # Log détaillé des timings
+        if self.debug:
+            logging.debug(f"Segment {i}: Timings détaillés:")
+            for key, value in timings.items():
+                pct = (value / segment_elapsed) * 100
+                logging.debug(f"  - {key}: {value:.3f}s ({pct:.1f}%)")
+
+        return {
+            'path': str(segment_path),
+            'time': segment_elapsed,
+            'index': i,
+            'timings': timings if self.debug else None
+        }
+
     def process_video(self, output_path="output_final.mp4"):
         """
         Traite la vidéo complète avec les overlays.
@@ -225,124 +384,63 @@ class VideoOverlayAutomator:
         # Créer un dossier temporaire pour les segments
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            segments = []
-            segment_times = []
 
-            # Traiter chaque clip
-            for i, (clip, score) in enumerate(zip(self.clips, self.scores), 1):
-                segment_start_time = time.time()
+            # Traitement parallèle des segments (optimal pour RTX 5070)
+            # Note: RTX 5070 a ~2-3 encodeurs NVENC, plus de workers = contention
+            max_workers = 3
+            print(f"\n🚀 Traitement parallèle activé ({max_workers} workers)")
 
-                print(f"\n[{i}/{len(self.clips)}] Processing clip: {clip['name']}")
+            segments_data = []
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Soumettre tous les jobs
+                futures = {}
+                for i, (clip, score) in enumerate(zip(self.clips, self.scores), 1):
+                    future = executor.submit(
+                        self.process_single_segment,
+                        i, clip, score, temp_path, original_bitrate, len(self.clips)
+                    )
+                    futures[future] = i
 
-                # Trouver le fichier vidéo source
-                try:
-                    video_file = self.find_video_file(clip['name'])
-                except FileNotFoundError as e:
-                    print(f"⚠️  {e}, skipping...")
-                    continue
+                # Récupérer les résultats au fur et à mesure
+                completed = 0
+                for future in as_completed(futures):
+                    completed += 1
+                    result = future.result()
+                    if result:
+                        segments_data.append(result)
 
-                # Calculer les timestamps
-                start_time = self.frames_to_seconds(clip['in_frame'])
-                duration = self.frames_to_seconds(clip['duration_frames'])
+                    # Afficher progression
+                    print(f"\n📊 Progression: {completed}/{len(self.clips)} segments terminés")
 
-                print(f"   Start: {start_time:.2f}s, Duration: {duration:.2f}s")
+            # Trier les segments par index et extraire les paths
+            segments_data.sort(key=lambda x: x['index'])
+            segments = [s['path'] for s in segments_data]
+            segment_times = [s['time'] for s in segments_data]
 
-                # Déterminer quels sets afficher (seulement les sets terminés)
-                # Si Set 1 = Jeux, on est dans le set 1 → pas de colonne set à afficher
-                # Si Set 1 ≠ Jeux, le set 1 est terminé → afficher Set 1
-                display_set1 = score['set1'] if score['set1'] and score['set1'] != score['jeux'] else None
-                display_set2 = score['set2'] if score['set2'] and score['set2'] != score['jeux'] else None
-
-                print(f"   Set1: {display_set1} | Set2: {display_set2} | Jeux: {score['jeux']} | Points: {score['points']}")
-
-                # Créer l'overlay avec le nouveau générateur
-                overlay_img = self.overlay_generator.create_overlay(
-                    team1_names=self.team1_names,
-                    team2_names=self.team2_names,
-                    jeux=score['jeux'],
-                    points=score['points'],
-                    set1=display_set1,
-                    set2=display_set2
-                )
-                overlay_path = temp_path / f"overlay_{i:03d}.png"
-                self.overlay_generator.save_overlay(overlay_img, str(overlay_path))
-
-                # Créer le segment avec overlay
-                segment_path = temp_path / f"segment_{i:03d}.mp4"
-
-                # Construire la commande FFmpeg avec l'encodeur détecté
-                ffmpeg_cmd = [
-                    'ffmpeg',
-                    '-hwaccel', 'cuda',                    # Décodage GPU NVDEC
-                    '-hwaccel_output_format', 'cuda',      # Garde frames sur GPU
-                    '-ss', str(start_time),
-                    '-i', video_file,
-                    '-i', str(overlay_path),
-                    '-filter_complex', '[0:v]hwdownload,format=nv12[base];[base][1:v]overlay=0:0,format=nv12,hwupload_cuda[out]',  # Download, overlay CPU, upload
-                    '-map', '[out]',
-                    '-t', str(duration),
-                    '-c:v', self.encoder['video_codec']
-                ]
-
-                # Ajouter preset si défini
-                if self.encoder['preset']:
-                    ffmpeg_cmd.extend(['-preset', self.encoder['preset']])
-
-                # Ajouter CRF si défini
-                if self.encoder['crf']:
-                    ffmpeg_cmd.extend(['-crf', self.encoder['crf']])
-
-                # Utiliser le bitrate original si détecté, sinon les paramètres par défaut
-                if original_bitrate and self.encoder['video_codec'] == 'hevc_nvenc':
-                    # Remplacer les paramètres de bitrate par ceux de l'original
-                    custom_params = []
-                    for j, param in enumerate(self.encoder['extra_params']):
-                        if param == '-b:v':
-                            custom_params.extend(['-b:v', f'{int(original_bitrate)}M'])
-                            # Skip la valeur suivante
-                            continue
-                        elif param == '-maxrate:v':
-                            custom_params.extend(['-maxrate:v', f'{int(original_bitrate * 1.2)}M'])
-                            continue
-                        elif param == '-bufsize:v':
-                            custom_params.extend(['-bufsize:v', f'{int(original_bitrate * 2)}M'])
-                            continue
-                        # Skip les valeurs (qui suivent les clés)
-                        if j > 0 and self.encoder['extra_params'][j-1] in ['-b:v', '-maxrate:v', '-bufsize:v']:
-                            continue
-                        custom_params.append(param)
-                    ffmpeg_cmd.extend(custom_params)
-                else:
-                    # Ajouter paramètres supplémentaires (bitrate, etc.)
-                    ffmpeg_cmd.extend(self.encoder['extra_params'])
-
-                # Audio et output
-                ffmpeg_cmd.extend([
-                    '-c:a', 'aac',
-                    '-b:a', '192k',
-                    '-y',
-                    str(segment_path)
-                ])
-
-                print(f"   Running FFmpeg ({self.encoder['video_codec']})...")
-                result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-
-                if result.returncode != 0:
-                    print(f"   ❌ FFmpeg error: {result.stderr}")
-                    continue
-
-                segments.append(str(segment_path))
-
-                segment_elapsed = time.time() - segment_start_time
-                segment_times.append(segment_elapsed)
-
-                # Calcul du temps moyen et estimation du temps restant
+            # Statistiques
+            if segment_times:
                 avg_time = sum(segment_times) / len(segment_times)
-                remaining_segments = len(self.clips) - i
-                estimated_remaining = avg_time * remaining_segments
+                print(f"\n⏱️  Temps moyen par segment: {self.format_time(avg_time)}")
 
-                print(f"   ✅ Segment créé en {self.format_time(segment_elapsed)}")
-                print(f"   ⏱️  Temps moyen: {self.format_time(avg_time)}/segment | Temps restant estimé: {self.format_time(estimated_remaining)}")
+                # Rapport détaillé des timings en mode debug
+                if self.debug:
+                    logging.debug("\n========== RAPPORT DÉTAILLÉ DES TIMINGS ==========")
+                    all_timings = {}
+                    for seg in segments_data:
+                        if seg.get('timings'):
+                            for key, value in seg['timings'].items():
+                                if key not in all_timings:
+                                    all_timings[key] = []
+                                all_timings[key].append(value)
+
+                    logging.debug("\nTemps moyens par étape:")
+                    for key, values in all_timings.items():
+                        avg = sum(values) / len(values)
+                        min_val = min(values)
+                        max_val = max(values)
+                        logging.debug(f"  {key}:")
+                        logging.debug(f"    Moyenne: {avg:.3f}s | Min: {min_val:.3f}s | Max: {max_val:.3f}s")
+                    logging.debug("=" * 50)
 
             # Concaténer tous les segments
             if segments:
@@ -413,6 +511,9 @@ if __name__ == "__main__":
     OUTPUT_FILE = "output/output_final.mp4"
     VIDEO_FOLDER = "data"  # Dossier contenant les vidéos sources
 
+    # Activer le mode debug (mettre False pour désactiver)
+    DEBUG_MODE = True
+
     # Lancer l'automatisation
-    automator = VideoOverlayAutomator(XML_FILE, EXCEL_FILE, VIDEO_FOLDER)
+    automator = VideoOverlayAutomator(XML_FILE, EXCEL_FILE, VIDEO_FOLDER, debug=DEBUG_MODE)
     automator.run(OUTPUT_FILE)

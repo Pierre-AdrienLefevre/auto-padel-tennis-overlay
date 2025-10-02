@@ -13,3 +13,6 @@ wheels/
 data/
 output/
 uv.lock
+logs/
+test_overlay_2sets.png
+test_overlay_simple.png
