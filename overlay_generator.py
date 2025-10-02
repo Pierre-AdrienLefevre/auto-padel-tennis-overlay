@@ -11,7 +11,7 @@ from pathlib import Path
 class PadelOverlayGenerator:
     """Génère des overlays de score style padel avec design professionnel."""
 
-    def __init__(self, width=1920, height=1080):
+    def __init__(self, width=3840, height=2160):
         """
         Initialise le générateur d'overlay.
 
@@ -29,24 +29,33 @@ class PadelOverlayGenerator:
         self.color_text_black = (0, 0, 0, 255)       # Noir
         self.color_separator = (255, 255, 255, 200)  # Blanc semi-transparent
 
-        # Dimensions du scoreboard
-        self.margin = 40
-        self.names_width = 570
+        # Dimensions du scoreboard (pour 4K, x2 des valeurs 1080p)
+        self.x_offset = 200  # Distance du bord gauche
+        self.y_offset_from_bottom = 10  # Distance du bord du bas (bord bas de l'overlay)
+        self.total_width = 2400  # Largeur totale de l'overlay
+        self.total_height = 500  # Hauteur totale
+
+        # Hauteur de chaque ligne
+        self.row_height = 250
+
+        # Largeurs des colonnes (x2 pour 4K)
+        self.names_width = 560
         self.games_width = 200
         self.points_width = 200
-        self.row_height = 75
-        self.border_radius = 20
-        self.spacing = 15  # Espacement entre les sections
+        self.set_width = 160  # Largeur pour les colonnes de sets
+
+        self.border_radius = 30
+        self.spacing = 16  # Espacement entre les sections
 
     def load_fonts(self):
         """Charge les polices système."""
         try:
-            # Police pour les noms d'équipes (Helvetica Bold)
-            font_team = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 45)
-            # Police pour les jeux (gros chiffres noirs)
+            # Police pour les noms d'équipes (x2 pour 4K)
+            font_team = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 44)
+            # Police pour les jeux (chiffres noirs, x2 pour 4K)
             font_games = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 90)
-            # Police pour les points (gros chiffres blancs)
-            font_points = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 85)
+            # Police pour les points (chiffres blancs, x2 pour 4K)
+            font_points = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 84)
 
             return font_team, font_games, font_points
         except Exception:
@@ -87,7 +96,9 @@ class PadelOverlayGenerator:
                       team1_names="LÉO / YANNOUCK",
                       team2_names="BILAL / PIERRE",
                       jeux="3/3",
-                      points="40/30"):
+                      points="40/30",
+                      set1=None,
+                      set2=None):
         """
         Crée l'overlay complet avec le score.
 
@@ -96,6 +107,8 @@ class PadelOverlayGenerator:
             team2_names: Noms de l'équipe 2
             jeux: Score de jeux (format: "eq1/eq2")
             points: Score de points (format: "eq1/eq2")
+            set1: Score du 1er set terminé (format: "eq1/eq2", ex: "5/7")
+            set2: Score du 2ème set terminé (format: "eq1/eq2", ex: "1/0")
 
         Returns:
             Image PIL avec l'overlay
@@ -110,12 +123,12 @@ class PadelOverlayGenerator:
         # Parser les scores
         jeux_eq1, jeux_eq2, points_eq1, points_eq2 = self.parse_score(jeux, points)
 
-        # Calculer la hauteur totale
-        total_height = self.row_height * 2 + 30
+        # Calculer la hauteur totale avec les nouvelles dimensions
+        total_height = self.total_height
 
-        # Position en bas à gauche
-        x_start = self.margin
-        y_start = self.height - total_height - self.margin
+        # Position selon les spécifications (96px du bord gauche, 241px du bas)
+        x_start = self.x_offset
+        y_start = self.height - self.y_offset_from_bottom - total_height
 
         # === SECTION 1: NOMS DES ÉQUIPES (fond bleu marine) ===
         x_names = x_start
@@ -126,8 +139,35 @@ class PadelOverlayGenerator:
             fill=self.color_bg_teams
         )
 
-        # === SECTION 2: JEUX (fond gris clair) ===
-        x_games = x_names + self.names_width + self.spacing
+        # Position courante pour les sections suivantes
+        x_current = x_names + self.names_width + self.spacing
+
+        # === SETS TERMINÉS (si présents, insérés avant les jeux) ===
+        x_set1 = None
+        x_set2 = None
+
+        if set1:
+            x_set1 = x_current
+            draw.rounded_rectangle(
+                [(x_set1, y_start),
+                 (x_set1 + self.set_width, y_start + total_height)],
+                radius=self.border_radius,
+                fill=self.color_bg_teams
+            )
+            x_current = x_set1 + self.set_width + self.spacing
+
+        if set2:
+            x_set2 = x_current
+            draw.rounded_rectangle(
+                [(x_set2, y_start),
+                 (x_set2 + self.set_width, y_start + total_height)],
+                radius=self.border_radius,
+                fill=self.color_bg_teams
+            )
+            x_current = x_set2 + self.set_width + self.spacing
+
+        # === JEUX DU SET EN COURS (fond gris clair) ===
+        x_games = x_current
         draw.rounded_rectangle(
             [(x_games, y_start),
              (x_games + self.games_width, y_start + total_height)],
@@ -135,7 +175,7 @@ class PadelOverlayGenerator:
             fill=self.color_bg_games
         )
 
-        # === SECTION 3: POINTS (fond bleu marine) ===
+        # === POINTS (fond bleu marine) ===
         x_points = x_games + self.games_width + self.spacing
         draw.rounded_rectangle(
             [(x_points, y_start),
@@ -145,38 +185,52 @@ class PadelOverlayGenerator:
         )
 
         # === LIGNES DE SÉPARATION HORIZONTALES ===
-        sep_y = y_start + self.row_height + 15
+        sep_y = y_start + self.row_height + 7
 
         # Séparation dans la section noms
         draw.line(
-            [(x_names + 30, sep_y), (x_names + self.names_width - 30, sep_y)],
+            [(x_names + 15, sep_y), (x_names + self.names_width - 15, sep_y)],
             fill=self.color_separator,
-            width=3
+            width=2
         )
 
         # Séparation dans la section jeux
         draw.line(
-            [(x_games + 40, sep_y), (x_games + self.games_width - 40, sep_y)],
+            [(x_games + 20, sep_y), (x_games + self.games_width - 20, sep_y)],
             fill=self.color_text_black,
-            width=3
+            width=2
         )
 
         # Séparation dans la section points
         draw.line(
-            [(x_points + 40, sep_y), (x_points + self.points_width - 40, sep_y)],
+            [(x_points + 20, sep_y), (x_points + self.points_width - 20, sep_y)],
             fill=self.color_separator,
-            width=3
+            width=2
         )
 
+        # Séparations dans les sets
+        if x_set1:
+            draw.line(
+                [(x_set1 + 15, sep_y), (x_set1 + self.set_width - 15, sep_y)],
+                fill=self.color_separator,
+                width=2
+            )
+        if x_set2:
+            draw.line(
+                [(x_set2 + 15, sep_y), (x_set2 + self.set_width - 15, sep_y)],
+                fill=self.color_separator,
+                width=2
+            )
+
         # === TEXTES ===
-        # Positions Y pour chaque ligne
-        y1_offset = 18  # Équipe 1
-        y2_offset = self.row_height + 23  # Équipe 2
+        # Positions Y pour chaque ligne (ajustées pour les nouvelles dimensions)
+        y1_offset = 10  # Équipe 1
+        y2_offset = self.row_height + 12  # Équipe 2
 
         # ÉQUIPE 1 (ligne du haut)
         # Noms
         draw.text(
-            (x_names + 30, y_start + y1_offset),
+            (x_names + 15, y_start + y1_offset),
             team1_names.upper(),
             fill=self.color_text_white,
             font=font_team
@@ -185,7 +239,7 @@ class PadelOverlayGenerator:
         jeux1_bbox = draw.textbbox((0, 0), jeux_eq1, font=font_games)
         jeux1_width = jeux1_bbox[2] - jeux1_bbox[0]
         draw.text(
-            (x_games + (self.games_width - jeux1_width) // 2, y_start + y1_offset - 10),
+            (x_games + (self.games_width - jeux1_width) // 2, y_start + y1_offset - 5),
             jeux_eq1,
             fill=self.color_text_black,
             font=font_games
@@ -194,7 +248,7 @@ class PadelOverlayGenerator:
         points1_bbox = draw.textbbox((0, 0), points_eq1, font=font_points)
         points1_width = points1_bbox[2] - points1_bbox[0]
         draw.text(
-            (x_points + (self.points_width - points1_width) // 2, y_start + y1_offset - 5),
+            (x_points + (self.points_width - points1_width) // 2, y_start + y1_offset - 3),
             points_eq1,
             fill=self.color_text_white,
             font=font_points
@@ -203,7 +257,7 @@ class PadelOverlayGenerator:
         # ÉQUIPE 2 (ligne du bas)
         # Noms
         draw.text(
-            (x_names + 30, y_start + y2_offset),
+            (x_names + 15, y_start + y2_offset),
             team2_names.upper(),
             fill=self.color_text_white,
             font=font_team
@@ -212,7 +266,7 @@ class PadelOverlayGenerator:
         jeux2_bbox = draw.textbbox((0, 0), jeux_eq2, font=font_games)
         jeux2_width = jeux2_bbox[2] - jeux2_bbox[0]
         draw.text(
-            (x_games + (self.games_width - jeux2_width) // 2, y_start + y2_offset - 10),
+            (x_games + (self.games_width - jeux2_width) // 2, y_start + y2_offset - 5),
             jeux_eq2,
             fill=self.color_text_black,
             font=font_games
@@ -221,11 +275,54 @@ class PadelOverlayGenerator:
         points2_bbox = draw.textbbox((0, 0), points_eq2, font=font_points)
         points2_width = points2_bbox[2] - points2_bbox[0]
         draw.text(
-            (x_points + (self.points_width - points2_width) // 2, y_start + y2_offset - 5),
+            (x_points + (self.points_width - points2_width) // 2, y_start + y2_offset - 3),
             points_eq2,
             fill=self.color_text_white,
             font=font_points
         )
+
+        # === SETS (si présents) ===
+        if set1 and x_set1:
+            set1_eq1, set1_eq2 = self.parse_score(set1, "0/0")[0:2]
+            # Set 1 équipe 1
+            set1_eq1_bbox = draw.textbbox((0, 0), set1_eq1, font=font_points)
+            set1_eq1_width = set1_eq1_bbox[2] - set1_eq1_bbox[0]
+            draw.text(
+                (x_set1 + (self.set_width - set1_eq1_width) // 2, y_start + y1_offset - 5),
+                set1_eq1,
+                fill=self.color_text_white,
+                font=font_points
+            )
+            # Set 1 équipe 2
+            set1_eq2_bbox = draw.textbbox((0, 0), set1_eq2, font=font_points)
+            set1_eq2_width = set1_eq2_bbox[2] - set1_eq2_bbox[0]
+            draw.text(
+                (x_set1 + (self.set_width - set1_eq2_width) // 2, y_start + y2_offset - 5),
+                set1_eq2,
+                fill=self.color_text_white,
+                font=font_points
+            )
+
+        if set2 and x_set2:
+            set2_eq1, set2_eq2 = self.parse_score(set2, "0/0")[0:2]
+            # Set 2 équipe 1
+            set2_eq1_bbox = draw.textbbox((0, 0), set2_eq1, font=font_points)
+            set2_eq1_width = set2_eq1_bbox[2] - set2_eq1_bbox[0]
+            draw.text(
+                (x_set2 + (self.set_width - set2_eq1_width) // 2, y_start + y1_offset - 5),
+                set2_eq1,
+                fill=self.color_text_white,
+                font=font_points
+            )
+            # Set 2 équipe 2
+            set2_eq2_bbox = draw.textbbox((0, 0), set2_eq2, font=font_points)
+            set2_eq2_width = set2_eq2_bbox[2] - set2_eq2_bbox[0]
+            draw.text(
+                (x_set2 + (self.set_width - set2_eq2_width) // 2, y_start + y2_offset - 5),
+                set2_eq2,
+                fill=self.color_text_white,
+                font=font_points
+            )
 
         return img
 
@@ -273,15 +370,24 @@ if __name__ == "__main__":
 
     generator = PadelOverlayGenerator()
 
-    # Créer un exemple
+    # Test 1: overlay simple
     overlay = generator.create_overlay(
         team1_names="LÉO / YANNOUCK",
         team2_names="BILAL / PIERRE",
         jeux="3/3",
         points="40/30"
     )
+    generator.save_overlay(overlay, "test_overlay_simple.png")
+    print("✅ Test 1: test_overlay_simple.png")
 
-    # Sauvegarder
-    output = "test_overlay.png"
-    generator.save_overlay(overlay, output)
-    print(f"✅ Overlay de test créé: {output}")
+    # Test 2: overlay avec 2 sets
+    overlay2 = generator.create_overlay(
+        team1_names="LÉO / YANNOUCK",
+        team2_names="PIERRE / BILAL",
+        jeux="5/7",
+        points="0/15",
+        set1="5/7",
+        set2="1/0"
+    )
+    generator.save_overlay(overlay2, "test_overlay_2sets.png")
+    print("✅ Test 2: test_overlay_2sets.png")
