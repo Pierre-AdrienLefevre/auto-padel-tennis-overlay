@@ -124,18 +124,22 @@ class VideoOverlayAutomator:
         ws = wb.active
 
         # Lire les scores (skip header row)
-        # Colonnes: Set, Num_Point, Jeux, Points, Commentaires
+        # Colonnes: Set, Num_Point, Set 1, Set 2, Jeux, Points, Commentaires
         for row in ws.iter_rows(min_row=2, values_only=True):
             if row[0] is not None:  # Si la row n'est pas vide
                 set_num = row[0]
                 point_num = row[1]
-                jeux = row[2] if len(row) > 2 and row[2] is not None else "0/0"
-                points = row[3] if len(row) > 3 and row[3] is not None else "0/0"
-                commentaires = row[4] if len(row) > 4 and row[4] is not None else ""
+                set1 = row[2] if len(row) > 2 and row[2] is not None else None
+                set2 = row[3] if len(row) > 3 and row[3] is not None else None
+                jeux = row[4] if len(row) > 4 and row[4] is not None else "0/0"
+                points = row[5] if len(row) > 5 and row[5] is not None else "0/0"
+                commentaires = row[6] if len(row) > 6 and row[6] is not None else ""
 
                 self.scores.append({
                     'set': set_num,
                     'point': point_num,
+                    'set1': set1 if set1 else None,
+                    'set2': set2 if set2 else None,
                     'jeux': jeux if jeux else "0/0",
                     'points': points if points else "0/0",
                     'commentaires': commentaires if commentaires else ""
@@ -204,14 +208,23 @@ class VideoOverlayAutomator:
                 duration = self.frames_to_seconds(clip['duration_frames'])
 
                 print(f"   Start: {start_time:.2f}s, Duration: {duration:.2f}s")
-                print(f"   Jeux: {score['jeux']} | Points: {score['points']}")
+
+                # Déterminer quels sets afficher (seulement les sets terminés)
+                # Si Set 1 = Jeux, on est dans le set 1 → pas de colonne set à afficher
+                # Si Set 1 ≠ Jeux, le set 1 est terminé → afficher Set 1
+                display_set1 = score['set1'] if score['set1'] and score['set1'] != score['jeux'] else None
+                display_set2 = score['set2'] if score['set2'] and score['set2'] != score['jeux'] else None
+
+                print(f"   Set1: {display_set1} | Set2: {display_set2} | Jeux: {score['jeux']} | Points: {score['points']}")
 
                 # Créer l'overlay avec le nouveau générateur
                 overlay_img = self.overlay_generator.create_overlay(
                     team1_names=self.team1_names,
                     team2_names=self.team2_names,
                     jeux=score['jeux'],
-                    points=score['points']
+                    points=score['points'],
+                    set1=display_set1,
+                    set2=display_set2
                 )
                 overlay_path = temp_path / f"overlay_{i:03d}.png"
                 self.overlay_generator.save_overlay(overlay_img, str(overlay_path))
@@ -336,7 +349,7 @@ if __name__ == "__main__":
     XML_FILE = "data/Séquence 01.xml"
     EXCEL_FILE = "data/match_points.xlsx"
     OUTPUT_FILE = "output/output_final.mp4"
-    VIDEO_FOLDER = "."  # Dossier contenant les vidéos sources
+    VIDEO_FOLDER = "data"  # Dossier contenant les vidéos sources
 
     # Lancer l'automatisation
     automator = VideoOverlayAutomator(XML_FILE, EXCEL_FILE, VIDEO_FOLDER)
