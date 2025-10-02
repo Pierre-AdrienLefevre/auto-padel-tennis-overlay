@@ -68,9 +68,19 @@ class VideoOverlayAutomator:
                     print("✅ GPU détecté: NVIDIA NVENC")
                     return {
                         'video_codec': 'hevc_nvenc',
-                        'preset': 'p4',  # p1=fastest, p7=slowest
+                        'preset': 'p1',  # p1=fastest (max speed)
                         'crf': None,
-                        'extra_params': ['-b:v', '8M']
+                        'extra_params': [
+                            '-rc:v', 'vbr',           # Variable bitrate (plus rapide que CBR)
+                            '-b:v', '10M',            # Bitrate cible
+                            '-maxrate:v', '15M',      # Bitrate max
+                            '-bufsize:v', '20M',      # Buffer
+                            '-spatial_aq', '1',       # Spatial AQ pour meilleure qualité
+                            '-temporal_aq', '1',      # Temporal AQ
+                            '-rc-lookahead', '20',    # Lookahead frames (compromis vitesse/qualité)
+                            '-surfaces', '64',        # Max surfaces pour RTX (défaut 32)
+                            '-2pass', '0'             # Désactive 2-pass (plus rapide)
+                        ]
                     }
             except:
                 pass
@@ -165,6 +175,23 @@ class VideoOverlayAutomator:
 
         raise FileNotFoundError(f"Video file not found: {clip_name}")
 
+    def get_video_bitrate(self, video_file):
+        """Extrait le bitrate de la vidéo source."""
+        try:
+            result = subprocess.run(
+                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=bit_rate', '-of', 'default=noprint_wrappers=1:nokey=1',
+                 video_file],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                bitrate_bps = int(result.stdout.strip())
+                bitrate_mbps = bitrate_bps / 1_000_000
+                return bitrate_mbps
+        except:
+            pass
+        return None
+
     def format_time(self, seconds):
         """Formate le temps en heures:minutes:secondes."""
         hours = int(seconds // 3600)
@@ -183,6 +210,17 @@ class VideoOverlayAutomator:
         """
         print(f"\n🎬 Starting video processing...")
         total_start_time = time.time()
+
+        # Détecter le bitrate de la première vidéo source
+        original_bitrate = None
+        if self.clips:
+            try:
+                first_video = self.find_video_file(self.clips[0]['name'])
+                original_bitrate = self.get_video_bitrate(first_video)
+                if original_bitrate:
+                    print(f"📊 Bitrate original détecté: {original_bitrate:.1f} Mbps")
+            except:
+                pass
 
         # Créer un dossier temporaire pour les segments
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -235,10 +273,13 @@ class VideoOverlayAutomator:
                 # Construire la commande FFmpeg avec l'encodeur détecté
                 ffmpeg_cmd = [
                     'ffmpeg',
+                    '-hwaccel', 'cuda',                    # Décodage GPU NVDEC
+                    '-hwaccel_output_format', 'cuda',      # Garde frames sur GPU
                     '-ss', str(start_time),
                     '-i', video_file,
                     '-i', str(overlay_path),
-                    '-filter_complex', '[0:v][1:v]overlay=0:0',
+                    '-filter_complex', '[0:v]hwdownload,format=nv12[base];[base][1:v]overlay=0:0,format=nv12,hwupload_cuda[out]',  # Download, overlay CPU, upload
+                    '-map', '[out]',
                     '-t', str(duration),
                     '-c:v', self.encoder['video_codec']
                 ]
@@ -251,8 +292,29 @@ class VideoOverlayAutomator:
                 if self.encoder['crf']:
                     ffmpeg_cmd.extend(['-crf', self.encoder['crf']])
 
-                # Ajouter paramètres supplémentaires (bitrate, etc.)
-                ffmpeg_cmd.extend(self.encoder['extra_params'])
+                # Utiliser le bitrate original si détecté, sinon les paramètres par défaut
+                if original_bitrate and self.encoder['video_codec'] == 'hevc_nvenc':
+                    # Remplacer les paramètres de bitrate par ceux de l'original
+                    custom_params = []
+                    for j, param in enumerate(self.encoder['extra_params']):
+                        if param == '-b:v':
+                            custom_params.extend(['-b:v', f'{int(original_bitrate)}M'])
+                            # Skip la valeur suivante
+                            continue
+                        elif param == '-maxrate:v':
+                            custom_params.extend(['-maxrate:v', f'{int(original_bitrate * 1.2)}M'])
+                            continue
+                        elif param == '-bufsize:v':
+                            custom_params.extend(['-bufsize:v', f'{int(original_bitrate * 2)}M'])
+                            continue
+                        # Skip les valeurs (qui suivent les clés)
+                        if j > 0 and self.encoder['extra_params'][j-1] in ['-b:v', '-maxrate:v', '-bufsize:v']:
+                            continue
+                        custom_params.append(param)
+                    ffmpeg_cmd.extend(custom_params)
+                else:
+                    # Ajouter paramètres supplémentaires (bitrate, etc.)
+                    ffmpeg_cmd.extend(self.encoder['extra_params'])
 
                 # Audio et output
                 ffmpeg_cmd.extend([
@@ -346,7 +408,7 @@ class VideoOverlayAutomator:
 
 if __name__ == "__main__":
     # Configuration
-    XML_FILE = "data/Séquence 01.xml"
+    XML_FILE = "data/Sequence_timeframe.xml"
     EXCEL_FILE = "data/match_points.xlsx"
     OUTPUT_FILE = "output/output_final.mp4"
     VIDEO_FOLDER = "data"  # Dossier contenant les vidéos sources
