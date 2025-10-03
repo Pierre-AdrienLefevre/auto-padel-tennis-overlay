@@ -1,0 +1,41 @@
+{
+  "name": "padel-overlay-generator",
+  "version": "1.0.0",
+  "description": "Générateur d'overlays de score pour vidéos de padel",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win"
+  },
+  "keywords": [
+    "padel",
+    "video",
+    "overlay",
+    "ffmpeg"
+  ],
+  "author": "Pierre-Adrien Lefevre",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0"
+  },
+  "dependencies": {},
+  "build": {
+    "appId": "com.padel.overlaygenerator",
+    "productName": "Padel Overlay Generator",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "main.py",
+      "overlay_generator.py"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    }
+  }
+}

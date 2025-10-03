@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Automatisation de l'ajout d'overlays de score sur des vidéos de padel.
 Lit un XML Premiere Pro et un fichier Excel avec les scores.
 """
+
+import io
+import sys
+
+# Forcer l'encodage UTF-8 pour Windows
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 import logging
 import platform
@@ -61,7 +70,7 @@ class VideoOverlayAutomator:
         """Détecte le meilleur encodeur GPU disponible selon la plateforme."""
         system = platform.system()
 
-        print("🔍 Détection de l'encodeur GPU...")
+        print("Detection de l'encodeur GPU...")
 
         # macOS: VideoToolbox
         if system == "Darwin":
@@ -71,7 +80,7 @@ class VideoOverlayAutomator:
                     capture_output=True, text=True, timeout=5
                 )
                 if 'hevc_videotoolbox' in result.stdout:
-                    print("✅ GPU détecté: VideoToolbox (macOS)")
+                    print("GPU detecte: VideoToolbox (macOS)")
                     return {
                         'video_codec': 'hevc_videotoolbox',
                         'preset': None,
@@ -94,7 +103,7 @@ class VideoOverlayAutomator:
                     capture_output=True, text=True, timeout=5
                 )
                 if 'hevc_nvenc' in result.stdout:
-                    print("✅ GPU détecté: NVIDIA NVENC")
+                    print("GPU detecte: NVIDIA NVENC")
                     return {
                         'video_codec': 'hevc_nvenc',
                         'preset': 'p1',  # p1=fastest (max speed)
@@ -115,7 +124,7 @@ class VideoOverlayAutomator:
                 pass
 
         # Fallback: CPU avec preset ultrafast
-        print("⚠️  Pas de GPU détecté, utilisation CPU (ultrafast)")
+        print("Pas de GPU detecte, utilisation CPU (ultrafast)")
         return {
             'video_codec': 'libx264',
             'preset': 'ultrafast',
@@ -125,7 +134,7 @@ class VideoOverlayAutomator:
 
     def parse_xml(self):
         """Parse le XML Premiere Pro pour extraire les clips vidéo."""
-        print(f"📄 Parsing XML: {self.xml_path}")
+        print(f"Parsing XML: {self.xml_path}")
         tree = ET.parse(self.xml_path)
         root = tree.getroot()
 
@@ -153,12 +162,12 @@ class VideoOverlayAutomator:
                 })
             break  # On prend seulement la première track
 
-        print(f"✅ Found {len(self.clips)} video clips")
+        print(f"Found {len(self.clips)} video clips")
         return self.clips
 
     def parse_excel(self):
         """Parse le fichier Excel pour extraire les scores."""
-        print(f"📊 Parsing Excel: {self.excel_path}")
+        print(f"Parsing Excel: {self.excel_path}")
         wb = openpyxl.load_workbook(self.excel_path)
         ws = wb.active
 
@@ -184,7 +193,7 @@ class VideoOverlayAutomator:
                     'commentaires': commentaires if commentaires else ""
                 })
 
-        print(f"✅ Found {len(self.scores)} scores")
+        print(f"Found {len(self.scores)} scores")
         return self.scores
 
     def frames_to_seconds(self, frames):
@@ -246,7 +255,7 @@ class VideoOverlayAutomator:
         try:
             video_file = self.find_video_file(clip['name'])
         except FileNotFoundError as e:
-            print(f"⚠️  {e}, skipping...")
+            print(f"WARNING: {e}, skipping...")
             return None
         timings['find_file'] = time.time() - t0
         logging.debug(f"Segment {i}: Fichier trouvé en {timings['find_file']:.3f}s")
@@ -349,7 +358,7 @@ class VideoOverlayAutomator:
             return None
 
         segment_elapsed = time.time() - segment_start_time
-        print(f"   ✅ Segment créé en {self.format_time(segment_elapsed)}")
+        print(f"   Segment cree en {self.format_time(segment_elapsed)}")
 
         # Log détaillé des timings
         if self.debug:
@@ -420,7 +429,7 @@ class VideoOverlayAutomator:
             # Statistiques
             if segment_times:
                 avg_time = sum(segment_times) / len(segment_times)
-                print(f"\n⏱️  Temps moyen par segment: {self.format_time(avg_time)}")
+                print(f"\nTemps moyen par segment: {self.format_time(avg_time)}")
 
                 # Rapport détaillé des timings en mode debug
                 if self.debug:
@@ -469,21 +478,21 @@ class VideoOverlayAutomator:
                 concat_elapsed = time.time() - concat_start_time
 
                 if result.returncode == 0:
-                    print(f"\n✅ Final video created: {output_path}")
-                    print(f"📹 Total segments: {len(segments)}")
-                    print(f"⏱️  Concatenation time: {self.format_time(concat_elapsed)}")
+                    print(f"\nFinal video created: {output_path}")
+                    print(f"Total segments: {len(segments)}")
+                    print(f"Concatenation time: {self.format_time(concat_elapsed)}")
                 else:
-                    print(f"\n❌ Concatenation failed: {result.stderr}")
+                    print(f"\nConcatenation failed: {result.stderr}")
             else:
-                print("\n❌ No segments were created")
+                print("\nNo segments were created")
 
             total_elapsed = time.time() - total_start_time
-            print(f"\n⏱️  TEMPS TOTAL: {self.format_time(total_elapsed)}")
+            print(f"\nTEMPS TOTAL: {self.format_time(total_elapsed)}")
 
     def run(self, output_path="output_final.mp4"):
         """Exécute le workflow complet."""
         print("=" * 60)
-        print("🎾 PADEL VIDEO OVERLAY AUTOMATOR")
+        print("PADEL VIDEO OVERLAY AUTOMATOR")
         print("=" * 60)
 
         self.parse_xml()
@@ -491,7 +500,7 @@ class VideoOverlayAutomator:
 
         # Vérifier la correspondance
         if len(self.clips) != len(self.scores):
-            print(f"\n⚠️  WARNING: {len(self.clips)} clips but {len(self.scores)} scores")
+            print(f"\nWARNING: {len(self.clips)} clips but {len(self.scores)} scores")
             print(f"   Using minimum: {min(len(self.clips), len(self.scores))}")
             min_len = min(len(self.clips), len(self.scores))
             self.clips = self.clips[:min_len]
@@ -500,19 +509,36 @@ class VideoOverlayAutomator:
         self.process_video(output_path)
 
         print("\n" + "=" * 60)
-        print("✨ DONE!")
+        print("DONE!")
         print("=" * 60)
 
 
 if __name__ == "__main__":
-    # Configuration
-    XML_FILE = "data/Sequence_timeframe.xml"
-    EXCEL_FILE = "data/match_points.xlsx"
-    OUTPUT_FILE = "output/output_final.mp4"
-    VIDEO_FOLDER = "data"  # Dossier contenant les vidéos sources
+    import argparse
 
-    # Activer le mode debug (mettre False pour désactiver)
-    DEBUG_MODE = True
+    # Parser les arguments de ligne de commande
+    parser = argparse.ArgumentParser(description='Génération d\'overlays pour vidéos de padel')
+    parser.add_argument('--xml', required=False, help='Fichier XML Premiere Pro')
+    parser.add_argument('--excel', required=False, help='Fichier Excel avec les scores')
+    parser.add_argument('--videos', required=False, help='Dossier contenant les vidéos sources')
+    parser.add_argument('--output', default='output_final.mp4', help='Fichier de sortie')
+    parser.add_argument('--debug', action='store_true', help='Activer le mode debug')
+
+    args = parser.parse_args()
+
+    # Configuration par défaut si pas d'arguments (mode standalone)
+    if not args.xml:
+        XML_FILE = "data/Sequence_timeframe.xml"
+        EXCEL_FILE = "data/match_points.xlsx"
+        OUTPUT_FILE = "output/output_final.mp4"
+        VIDEO_FOLDER = "data"
+        DEBUG_MODE = True
+    else:
+        XML_FILE = args.xml
+        EXCEL_FILE = args.excel
+        VIDEO_FOLDER = args.videos
+        OUTPUT_FILE = args.output
+        DEBUG_MODE = args.debug
 
     # Lancer l'automatisation
     automator = VideoOverlayAutomator(XML_FILE, EXCEL_FILE, VIDEO_FOLDER, debug=DEBUG_MODE)

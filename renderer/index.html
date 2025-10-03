@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Padel Overlay Generator</title>
+    <link href="styles.css" rel="stylesheet">
+</head>
+<body>
+<div class="container">
+    <!-- Header -->
+    <header>
+        <h1>🎾 Padel Overlay Generator</h1>
+        <p class="version">v<span id="app-version">1.0.0-alpha</span></p>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <!-- File Selection Section -->
+        <section class="card">
+            <h2>1. Sélection des fichiers</h2>
+
+            <div class="file-input">
+                <label>Fichier XML (Premiere Pro):</label>
+                <div class="input-group">
+                    <input id="xml-path" placeholder="Aucun fichier sélectionné" readonly type="text">
+                    <button class="btn-secondary" id="btn-xml">Parcourir</button>
+                </div>
+            </div>
+
+            <div class="file-input">
+                <label>Fichier Excel (Scores):</label>
+                <div class="input-group">
+                    <input id="excel-path" placeholder="Aucun fichier sélectionné" readonly type="text">
+                    <button class="btn-secondary" id="btn-excel">Parcourir</button>
+                </div>
+            </div>
+
+            <div class="file-input">
+                <label>Fichiers vidéo:</label>
+                <div class="input-group">
+                    <input id="video-path" placeholder="Aucun fichier sélectionné" readonly type="text">
+                    <button class="btn-secondary" id="btn-videos">Parcourir</button>
+                </div>
+            </div>
+
+            <div class="file-input">
+                <label>Fichier de sortie:</label>
+                <div class="input-group">
+                    <input id="output-path" placeholder="output_final.mp4" type="text" value="output_final.mp4">
+                    <button class="btn-secondary" id="btn-output">Parcourir</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Processing Section -->
+        <section class="card">
+            <h2>2. Génération</h2>
+
+            <button class="btn-primary" id="btn-generate">
+                🚀 Générer la vidéo avec overlays
+            </button>
+
+            <!-- Progress Bar -->
+            <div class="progress-container" id="progress-container" style="display: none;">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                    <span class="progress-text" id="progress-text">0%</span>
+                </div>
+                <p class="time-remaining" id="time-remaining"></p>
+            </div>
+
+            <!-- Log Output -->
+            <div class="log-container">
+                <div class="log-output" id="log-output"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>Traitement GPU accéléré (NVENC) • <a href="#" id="check-updates">Vérifier les mises à jour</a></p>
+    </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
