@@ -211,7 +211,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build avec PyInstaller
-        run: python build_exe.py
+        run: python utils/build_exe.py
 
       - name: Renommer et préparer l'exécutable
         shell: bash

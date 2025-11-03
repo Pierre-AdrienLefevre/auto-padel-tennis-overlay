@@ -57,12 +57,12 @@ jobs:
       - name: Build avec PyInstaller (Windows)
         if: runner.os == 'Windows'
         run: |
-          python build_exe.py
+          python utils/build_exe.py
 
       - name: Build avec PyInstaller (macOS)
         if: runner.os == 'macOS'
         run: |
-          python build_exe.py
+          python utils/build_exe.py
 
       - name: Vérifier les fichiers générés
         shell: bash
@@ -70,9 +70,9 @@ jobs:
           echo "Contenu du dossier dist:"
           ls -lh dist/
           if [ -f "dist/${{ matrix.build_name }}" ]; then
-            echo "✓ Exécutable trouvé: ${{ matrix.build_name }}"
+            echo "[OK] Exécutable trouvé: ${{ matrix.build_name }}"
           else
-            echo "❌ Exécutable non trouvé!"
+            echo "[ERROR] Exécutable non trouvé!"
             exit 1
           fi
 
