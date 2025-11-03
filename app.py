@@ -18,8 +18,29 @@ from PyQt6.QtWidgets import (
 
 from main import VideoOverlayAutomator
 
+
+def get_version():
+    """Lit la version depuis pyproject.toml."""
+    try:
+        import tomllib
+    except ImportError:
+        # Python < 3.11
+        try:
+            import tomli as tomllib
+        except ImportError:
+            return "0.0.0"
+
+    try:
+        pyproject_path = Path(__file__).parent / "pyproject.toml"
+        with open(pyproject_path, "rb") as f:
+            data = tomllib.load(f)
+            return data.get("project", {}).get("version", "0.0.0")
+    except Exception:
+        return "0.0.0"
+
+
 # Version de l'application
-APP_VERSION = "0.8.0"
+APP_VERSION = get_version()
 GITHUB_REPO = "Pierre-AdrienLefevre/auto-padel-tennis-overlay"
 
 

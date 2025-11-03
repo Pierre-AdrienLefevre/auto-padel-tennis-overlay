@@ -106,6 +106,38 @@ jobs:
           echo "version_type=$VERSION_TYPE" >> $GITHUB_OUTPUT
           echo "last_version=$LAST_TAG" >> $GITHUB_OUTPUT
 
+      - name: Mettre à jour la version dans pyproject.toml
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          echo "[INFO] Mise à jour de pyproject.toml vers la version $VERSION"
+
+          # Utiliser sed pour remplacer la version dans pyproject.toml
+          if [ "$RUNNER_OS" == "macOS" ] || [ "$RUNNER_OS" == "Linux" ]; then
+            sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+            rm -f pyproject.toml.bak
+          fi
+
+          # Vérifier le changement
+          echo "[INFO] Nouvelle version dans pyproject.toml:"
+          grep "^version = " pyproject.toml
+
+      - name: Commit et push de la nouvelle version
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add pyproject.toml
+
+          # Vérifier s'il y a des changements
+          if git diff --staged --quiet; then
+            echo "[INFO] Aucun changement de version nécessaire"
+          else
+            git commit -m "chore: bump version to $VERSION"
+            git push origin main
+            echo "[INFO] Version $VERSION commitée et pushée"
+          fi
+
       - name: Générer les notes de version
         id: changelog
         run: |
