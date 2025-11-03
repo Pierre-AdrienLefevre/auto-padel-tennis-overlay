@@ -1,10 +1,7 @@
 name: Tests et Vérifications
 
 on:
-  # Uniquement sur push vers main et develop (pas les branches de feature)
-  push:
-    branches: [ main, develop ]
-  # Sur toutes les PR
+  # Sur toutes les PR (c'est ici que les tests sont importants)
   pull_request:
     branches: [ main, develop ]
   # Permet de lancer manuellement
@@ -14,8 +11,6 @@ jobs:
   tests:
     name: Tests Python ${{ matrix.python-version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    # Éviter de lancer les tests en double : skip si c'est un push ET qu'il y a une PR ouverte
-    if: github.event_name != 'push' || github.event.pull_request == null
 
     strategy:
       fail-fast: false
