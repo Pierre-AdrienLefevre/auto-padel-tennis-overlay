@@ -1,205 +1,265 @@
-# 🎾 Auto Padel Tennis Overlay
+# 🎾 Padel Video Overlay Generator
 
-Automated score overlay generator for padel/tennis match videos. Reads Premiere Pro XML timelines and Excel score sheets to automatically add professional score overlays using FFmpeg.
-
-## Features
-
-- 📹 **Automatic Processing**: Extracts clips from Premiere Pro XML exports
-- 📊 **Excel Integration**: Reads match scores from Excel files
-- 🎨 **Professional Overlays**: Generates clean, customizable score overlays
-- ⚡ **GPU Acceleration**: Supports VideoToolbox (macOS) and NVENC (Windows/Linux)
-- 🎯 **4K Support**: Optimized for 4K (3840x2160) video processing
-- 🔄 **Multi-Set Support**: Automatically displays completed sets
-
-## Workflow
-
-1. Edit your padel/tennis match video in Adobe Premiere Pro, cutting it point-by-point
-2. Export timeline as **Final Cut Pro XML** (File → Export → Final Cut Pro XML)
-3. Maintain match scores in an Excel file (`match_points.xlsx`)
-4. Run the script to automatically generate overlays and produce the final video
-
-## Installation
-
-### Requirements
-
-- Python 3.13+
-- FFmpeg with hardware acceleration support
-- Adobe Premiere Pro (for XML export)
-
-### Setup
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/auto-padel-tennis-overlay.git
-cd auto-padel-tennis-overlay
-
-# Install dependencies
-pip install openpyxl pillow
-
-# Verify FFmpeg installation
-ffmpeg -version
-```
-
-## Usage
-
-### 1. Prepare Your Files
-
-**Excel File Structure (`match_points.xlsx`):**
-
-| Set | Num_Point | Set 1 | Set 2 | Jeux  | Points | Commentaire |
-|-----|-----------|-------|-------|-------|--------|-------------|
-| 1   | 1         |       |       | 0/0   | 0/15   |             |
-| 1   | 2         |       |       | 0/0   | 0/40   |             |
-| 1   | 3         |       |       | 0/1   | 0/0    |             |
-| 2   | 50        | 6/7   |       | 0/0   | 0/0    |             |
-
-- **Set**: Current set number
-- **Set 1, Set 2**: Scores of completed sets (empty if still in progress)
-- **Jeux**: Current game score (format: "team1/team2")
-- **Points**: Current point score (format: "team1/team2")
-
-**Premiere Pro XML Export:**
-- Cut your video point-by-point in Premiere Pro
-- Export: File → Export → Final Cut Pro XML
-- Number of clips in XML should match number of rows in Excel
-
-### 2. Configure the Script
-
-Edit `main.py` to set your paths:
-
-```python
-XML_FILE = "data/Séquence 01.xml"
-EXCEL_FILE = "data/match_points.xlsx"
-OUTPUT_FILE = "output/output_final.mp4"
-VIDEO_FOLDER = "data"  # Folder containing source videos
-```
-
-### 3. Run the Script
-
-```bash
-python main.py
-```
-
-The script will:
-1. Parse the XML timeline and extract clip timings
-2. Read scores from Excel
-3. Generate overlays for each point
-4. Process video segments with GPU acceleration
-5. Concatenate all segments into the final video
-
-## Customization
-
-### Overlay Style
-
-Edit `overlay_generator.py` to customize:
-
-- **Colors**: Modify `color_bg_teams`, `color_bg_games`, etc.
-- **Dimensions**: Adjust `x_offset`, `y_offset_from_bottom`, `total_width`, `total_height`
-- **Fonts**: Change font family and sizes in `load_fonts()`
-- **Team Names**: Set default team names in `main.py`
-
-### Video Resolution
-
-The overlay generator defaults to 4K (3840x2160). For other resolutions:
-
-```python
-generator = PadelOverlayGenerator(width=1920, height=1080)  # 1080p
-```
-
-## Project Structure
-
-```
-auto-padel-tennis-overlay/
-├── main.py                    # Main automation script
-├── overlay_generator.py       # Overlay generation module
-├── match_points.xlsx          # Excel score sheet (template)
-├── Séquence 01.xml           # Premiere Pro XML export (example)
-├── data/                      # Source videos and input files
-├── output/                    # Generated videos
-└── exemple_overlay/           # Example overlay designs
-```
-
-## Technical Details
-
-### Frame Rate
-- NTSC 60fps (59.94fps) with drop-frame timecode
-- Automatically converts frame numbers to seconds
-
-### GPU Encoding
-
-**macOS (VideoToolbox):**
-```
-hevc_videotoolbox with quality preset 70
-```
-
-**Windows/Linux (NVENC):**
-```
-hevc_nvenc with preset p4
-```
-
-**CPU Fallback:**
-```
-libx264 with ultrafast preset
-```
-
-### Overlay Position (4K)
-- **X Offset**: 200px from left edge
-- **Y Offset**: 10px from bottom edge
-- **Size**: ~2400x500px
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Video not found**
-   - Ensure source videos are in the `VIDEO_FOLDER` directory
-   - Check file names match the XML clip names
-
-2. **Clips/scores mismatch**
-   - Verify number of clips in XML matches rows in Excel
-   - Script will use minimum of both and warn you
-
-3. **GPU encoding fails**
-   - Check FFmpeg hardware support: `ffmpeg -encoders | grep videotoolbox`
-   - Script will automatically fallback to CPU encoding
-
-4. **Overlay position wrong**
-   - Verify video resolution matches overlay generator settings
-   - Adjust `x_offset`, `y_offset_from_bottom` in `overlay_generator.py`
-
-## Examples
-
-See `exemple_overlay/` folder for reference overlay designs:
-- `Overlay_précis.png` - Basic overlay (1st set)
-- `Overlay_précis2.png` - Overlay with tie score
-- `Overlay_2emeset.png` - Overlay with multiple sets
-
-## Performance
-
-Processing times (approximate):
-- **4K with GPU**: ~2-3 seconds per segment
-- **4K with CPU**: ~8-12 seconds per segment
-- **Concatenation**: ~1-2 seconds for full match
-
-Example: 50-point match (~10 minutes) processes in ~5-10 minutes with GPU.
-
-## Contributing
-
-Contributions are welcome! Feel free to:
-- Report bugs
-- Suggest features
-- Submit pull requests
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Built with Python, Pillow, FFmpeg
-- Designed for padel/tennis video editors
-- Inspired by professional sports broadcast overlays
+[🇫🇷 Français](#français) | [🇬🇧 English](#english)
 
 ---
 
+## Français
+
+**Application desktop automatique pour générer des overlays de score professionnels sur des vidéos de padel/tennis.**
+Lit les timelines Premiere Pro XML et les fichiers Excel de scores pour ajouter automatiquement des overlays avec FFmpeg
+accéléré GPU.
+
+[![Tests](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/workflows/Tests%20et%20V%C3%A9rifications/badge.svg)](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+
+### ✨ Fonctionnalités
+
+- 🖥️ **Interface PyQt6** - Application desktop conviviale avec suivi de progression en temps réel
+- 📹 **Traitement Automatique** - Extrait les clips depuis les exports XML Premiere Pro
+- 📊 **Intégration Excel** - Lit les scores depuis des fichiers Excel
+- 🎨 **Overlays Professionnels** - Design épuré avec ombres portées et coins arrondis
+- ⚡ **Accélération GPU** - Support VideoToolbox (macOS) et NVENC (Windows)
+- 🎯 **Support 4K** - Optimisé pour la vidéo 4K (3840x2160)
+- 🔄 **Support Multi-Sets** - Affiche automatiquement les sets complétés
+- 🧵 **Traitement Parallèle** - Traite plusieurs segments vidéo simultanément
+- 🔔 **Vérification Auto-MAJ** - Notifie quand une nouvelle version est disponible
+- 🧪 **Tests Automatisés** - 34 tests unitaires avec CI/CD GitHub Actions
+
+### 🚀 Installation
+
+#### Prérequis
+
+- **Python 3.13+** (ou utilisez les exécutables pré-compilés)
+- **FFmpeg** avec support d'accélération matérielle
+- **Adobe Premiere Pro** (pour l'export XML)
+
+#### Option 1 : Exécutables Pré-compilés (Recommandé)
+
+Téléchargez la dernière version
+depuis [Releases](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/releases)
+
+**Windows :**
+
+```powershell
+# Téléchargez PadelOverlayGenerator-Windows.exe
+# Installez FFmpeg : https://ffmpeg.org/download.html
+# Double-cliquez sur l'exécutable
+```
+
+**macOS :**
+
+```bash
+# Téléchargez PadelOverlayGenerator-macOS
+# Installez FFmpeg : brew install ffmpeg
+chmod +x PadelOverlayGenerator-macOS
+./PadelOverlayGenerator-macOS
+```
+
+#### Option 2 : Installation depuis Source
+
+```bash
+git clone https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay.git
+cd auto-padel-tennis-overlay
+pip install -e .
+python app.py
+```
+
+### 📖 Utilisation
+
+#### 1. Préparer vos Fichiers
+
+**Fichier Excel (`match_points.xlsx`):**
+
+| Set | Num_Point | Set1 | Set2 | Jeux | Points | Commentaires |
+|-----|-----------|------|------|------|--------|--------------|
+| 1   | 1         |      |      | 0/0  | 0/15   |              |
+| 1   | 2         |      |      | 0/0  | 0/40   |              |
+
+**Export Premiere Pro :**
+
+1. Découpez votre vidéo point par point
+2. Exportez : **Fichier → Exporter → Final Cut Pro XML**
+
+#### 2. Lancer l'Application
+
+1. Ouvrez l'application
+2. Sélectionnez XML, Excel, et dossier vidéos
+3. Cliquez sur "Générer la vidéo avec overlays"
+4. Suivez la progression
+5. Vidéo finale dans `output/`
+
+### 🔧 Détails Techniques
+
+**Encodage GPU :**
+
+| Plateforme    | Encodeur            | Config     |
+|---------------|---------------------|------------|
+| macOS         | `hevc_videotoolbox` | Quality 70 |
+| Windows/Linux | `hevc_nvenc`        | Preset p4  |
+| CPU Fallback  | `libx264`           | Ultrafast  |
+
+**Performance (4K) :**
+
+- Avec GPU : 2-3 sec/segment
+- Avec CPU : 8-12 sec/segment
+
+### 🤝 Contribution
+
+Utilisez [conventional commits](https://www.conventionalcommits.org/) :
+
+- `feat:` → Version MINOR
+- `fix:` → Version PATCH
+- `feat!:` → Version MAJOR
+
+### 📝 Évolutions Futures Possibles
+
+- [ ] Support DaVinci Resolve XML
+- [ ] Thèmes d'overlay personnalisables
+- [ ] Mode batch pour plusieurs matchs
+- [ ] Application Electron multiplateforme
+
+### 📄 Licence
+
+MIT License - voir [LICENSE](LICENSE)
+
+---
+
+## English
+
+**Automated desktop application to generate professional score overlays for padel/tennis match videos.** Reads Premiere
+Pro XML timelines and Excel score sheets to automatically add overlays using GPU-accelerated FFmpeg.
+
+[![Tests](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/workflows/Tests%20et%20V%C3%A9rifications/badge.svg)](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+
+### ✨ Features
+
+- 🖥️ **PyQt6 Interface** - User-friendly desktop app with real-time progress tracking
+- 📹 **Automatic Processing** - Extracts clips from Premiere Pro XML exports
+- 📊 **Excel Integration** - Reads match scores from Excel files
+- 🎨 **Professional Overlays** - Clean design with drop shadows and rounded corners
+- ⚡ **GPU Acceleration** - VideoToolbox (macOS) and NVENC (Windows) support
+- 🎯 **4K Support** - Optimized for 4K (3840x2160) video processing
+- 🔄 **Multi-Set Support** - Automatically displays completed sets
+- 🧵 **Parallel Processing** - Processes multiple video segments simultaneously
+- 🔔 **Auto-Update Check** - Notifies when new version is available
+- 🧪 **Automated Testing** - 34 unit tests with GitHub Actions CI/CD
+
+### 🚀 Installation
+
+#### Requirements
+
+- **Python 3.13+** (or use pre-compiled executables)
+- **FFmpeg** with hardware acceleration support
+- **Adobe Premiere Pro** (for XML export)
+
+#### Option 1: Pre-compiled Executables (Recommended)
+
+Download latest version from [Releases](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/releases)
+
+**Windows:**
+
+```powershell
+# Download PadelOverlayGenerator-Windows.exe
+# Install FFmpeg: https://ffmpeg.org/download.html
+# Double-click the executable
+```
+
+**macOS:**
+```bash
+# Download PadelOverlayGenerator-macOS
+# Install FFmpeg: brew install ffmpeg
+chmod +x PadelOverlayGenerator-macOS
+./PadelOverlayGenerator-macOS
+```
+
+#### Option 2: Install from Source
+
+```bash
+git clone https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay.git
+cd auto-padel-tennis-overlay
+pip install -e .
+python app.py
+```
+
+### 📖 Usage
+
+#### 1. Prepare Your Files
+
+**Excel File (`match_points.xlsx`):**
+
+| Set | Num_Point | Set1 | Set2 | Games | Points | Comments |
+|-----|-----------|------|------|-------|--------|----------|
+| 1   | 1         |      |      | 0/0   | 0/15   |          |
+| 1   | 2         |      |      | 0/0   | 0/40   |          |
+
+**Premiere Pro Export:**
+
+1. Cut your video point-by-point
+2. Export: **File → Export → Final Cut Pro XML**
+
+#### 2. Run the Application
+
+1. Open the application
+2. Select XML, Excel, and video folder
+3. Click "Generate video with overlays"
+4. Follow the progress
+5. Final video in `output/`
+
+### 🔧 Technical Details
+
+**GPU Encoding:**
+
+| Platform      | Encoder             | Config     |
+|---------------|---------------------|------------|
+| macOS         | `hevc_videotoolbox` | Quality 70 |
+| Windows/Linux | `hevc_nvenc`        | Preset p4  |
+| CPU Fallback  | `libx264`           | Ultrafast  |
+
+**Performance (4K):**
+
+- With GPU: 2-3 sec/segment
+- With CPU: 8-12 sec/segment
+
+### 🤝 Contributing
+
+Use [conventional commits](https://www.conventionalcommits.org/):
+
+- `feat:` → MINOR version
+- `fix:` → PATCH version
+- `feat!:` → MAJOR version
+
+### 📝 Future Roadmap
+
+- [ ] DaVinci Resolve XML support
+- [ ] Customizable overlay themes
+- [ ] Batch mode for multiple matches
+- [ ] Cross-platform Electron app
+
+### 📄 License
+
+MIT License - see [LICENSE](LICENSE)
+
+---
+
+### 🙏 Acknowledgments / Remerciements
+
+- Built with **Python**, **PyQt6**, **Pillow**, and **FFmpeg**
+- Designed for padel/tennis video editors
+- Inspired by professional sports broadcast overlays
+- Automated testing with **pytest** and **GitHub Actions**
+
 **Made with ❤️ for the padel/tennis community**
+
+*Last update: November 2025 | Dernière mise à jour : Novembre 2025*
+
+### 📞 Support
+
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/Pierre-AdrienLefevre/auto-padel-tennis-overlay/discussions)
+- 📖 **Documentation**: See [WORKFLOW.md](WORKFLOW.md) and [CLAUDE.md](CLAUDE.md)
+
+⭐ **Star the project if you find it useful!** | **Donnez une étoile si le projet vous est utile !**
