@@ -46,7 +46,7 @@ jobs:
       - name: Installation des dépendances
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
+          pip install -e ".[dev]"
 
       - name: Vérification des imports
         run: |
@@ -56,20 +56,37 @@ jobs:
           python -c "import openpyxl; print('✓ openpyxl OK')"
           python -c "import lxml; print('✓ lxml OK')"
           python -c "import requests; print('✓ requests OK')"
+          python -c "import pytest; print('✓ pytest OK')"
 
       - name: Vérification syntaxe des modules
         run: |
           python -m py_compile app.py
           python -m py_compile main.py
-          python -m py_compile overlay_generator.py
-          python -m py_compile build_exe.py
+          python -m py_compile utils/overlay_generator.py
+          python -m py_compile utils/build_exe.py
           echo "✓ Tous les fichiers Python sont valides"
 
       - name: Test d'importation des modules principaux
         run: |
           python -c "from main import VideoOverlayAutomator; print('✓ main.py OK')"
-          python -c "from overlay_generator import OverlayGenerator; print('✓ overlay_generator.py OK')"
+          python -c "from utils.overlay_generator import PadelOverlayGenerator; print('✓ overlay_generator.py OK')"
           echo "✓ Tous les modules s'importent correctement"
+
+      - name: Exécution des tests unitaires
+        run: |
+          pytest tests/ -v --tb=short
+
+      - name: Exécution des tests avec couverture
+        run: |
+          pytest tests/ --cov=. --cov-report=term-missing --cov-report=xml
+
+      - name: Upload du rapport de couverture
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report-${{ matrix.os }}
+          path: coverage.xml
+          retention-days: 30
 
       - name: Vérification FFmpeg
         run: ffmpeg -version
