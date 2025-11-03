@@ -1,10 +1,10 @@
 name: Build Exécutables
 
 on:
-  push:
-    branches: [ main ]
+  # Uniquement sur PR vers main (pas sur push direct)
   pull_request:
     branches: [ main ]
+  # Permet de lancer manuellement
   workflow_dispatch:
 
 jobs:

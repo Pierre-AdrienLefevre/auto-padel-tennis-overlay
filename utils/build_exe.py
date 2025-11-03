@@ -17,12 +17,11 @@ def build():
     separator = ';' if sys.platform == 'win32' else ':'
 
     # Options PyInstaller
-    PyInstaller.__main__.run([
+    options = [
         'app.py',  # Script principal
         '--name=PadelOverlayGenerator',  # Nom de l'exe
         '--onefile',  # Un seul fichier exe
         '--windowed',  # Pas de console (GUI seulement)
-        '--icon=NONE',  # TODO: Ajouter une icône
         f'--add-data=utils{separator}utils',  # Inclure le package utils
         '--hidden-import=PyQt6',
         '--hidden-import=PIL',
@@ -31,7 +30,9 @@ def build():
         '--hidden-import=requests',
         '--clean',  # Nettoyer avant build
         '--noconfirm',  # Pas de confirmation
-    ])
+    ]
+
+    PyInstaller.__main__.run(options)
 
 
 if __name__ == "__main__":
