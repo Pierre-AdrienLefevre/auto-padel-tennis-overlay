@@ -1,6 +1,9 @@
 name: Release Automatique
 
 on:
+  pull_request:
+    types: [ closed ]
+    branches: [ main ]
   push:
     tags:
       - 'v*.*.*'  # Déclenché par des tags comme v1.0.0, v0.8.1, etc.
@@ -13,11 +16,17 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   create-release:
     name: Créer la Release GitHub
     runs-on: ubuntu-latest
+    # Ne s'exécute que si la PR a été mergée OU si c'est un tag/manual
+    if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true) ||
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
@@ -28,24 +37,82 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Déterminer la version
+      - name: Déterminer la nouvelle version
         id: get_version
         run: |
+          # Si c'est un tag manuel
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Version from tag: $VERSION"
+            exit 0
+          fi
+
+          # Si c'est un workflow_dispatch manuel
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "Version from input: $VERSION"
+            exit 0
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Version: $VERSION"
+
+          # Sinon, calcul automatique depuis les commits (PR mergée)
+          # Récupérer la dernière version tag (ou 0.0.0 si aucune)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Dernière version: $LAST_TAG"
+
+          # Extraire MAJOR, MINOR, PATCH
+          VERSION=${LAST_TAG#v}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+
+          # Récupérer les commits depuis le dernier tag
+          if [ "$LAST_TAG" = "v0.0.0" ]; then
+            COMMITS=$(git log --pretty=format:"%s" origin/main)
+          else
+            COMMITS=$(git log ${LAST_TAG}..origin/main --pretty=format:"%s")
+          fi
+
+          echo "Commits analysés:"
+          echo "$COMMITS"
+
+          # Déterminer le type de version selon conventional commits
+          if echo "$COMMITS" | grep -qiE "^(feat!|fix!|chore!):|BREAKING CHANGE:"; then
+            # MAJOR version (breaking change)
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            VERSION_TYPE="major"
+          elif echo "$COMMITS" | grep -qiE "^feat(\(.+\))?:"; then
+            # MINOR version (nouvelle fonctionnalité)
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            VERSION_TYPE="minor"
+          elif echo "$COMMITS" | grep -qiE "^(fix|test|docs|refactor|chore)(\(.+\))?:"; then
+            # PATCH version (correction, tests, docs, etc.)
+            PATCH=$((PATCH + 1))
+            VERSION_TYPE="patch"
+          else
+            # Par défaut, PATCH version
+            PATCH=$((PATCH + 1))
+            VERSION_TYPE="patch"
+          fi
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Nouvelle version: $NEW_VERSION (type: $VERSION_TYPE)"
+
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version_type=$VERSION_TYPE" >> $GITHUB_OUTPUT
+          echo "last_version=$LAST_TAG" >> $GITHUB_OUTPUT
 
       - name: Générer les notes de version
         id: changelog
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
 
-          # Trouver le tag précédent
-          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          # Utiliser la variable last_version déjà calculée pour éviter les problèmes de timing
+          PREV_TAG="${{ steps.get_version.outputs.last_version }}"
 
           echo "## 🎉 Padel Overlay Generator v$VERSION" > release_notes.md
           echo "" >> release_notes.md
@@ -135,7 +202,7 @@ jobs:
           pip install pyinstaller
 
       - name: Build avec PyInstaller
-        run: python build_exe.py
+        run: python utils/build_exe.py
 
       - name: Renommer et préparer l'exécutable
         shell: bash

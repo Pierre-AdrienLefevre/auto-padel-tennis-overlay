@@ -1,10 +1,10 @@
 name: Tests et Vérifications
 
 on:
-  push:
-    branches: [ main, develop ]
+  # Sur toutes les PR (c'est ici que les tests sont importants)
   pull_request:
     branches: [ main, develop ]
+  # Permet de lancer manuellement
   workflow_dispatch:
 
 jobs:
@@ -51,12 +51,12 @@ jobs:
       - name: Vérification des imports
         run: |
           python -c "import sys; print(f'Python {sys.version}')"
-          python -c "import PyQt6; print('✓ PyQt6 OK')"
-          python -c "import PIL; print('✓ Pillow OK')"
-          python -c "import openpyxl; print('✓ openpyxl OK')"
-          python -c "import lxml; print('✓ lxml OK')"
-          python -c "import requests; print('✓ requests OK')"
-          python -c "import pytest; print('✓ pytest OK')"
+          python -c "import PyQt6; print('[OK] PyQt6')"
+          python -c "import PIL; print('[OK] Pillow')"
+          python -c "import openpyxl; print('[OK] openpyxl')"
+          python -c "import lxml; print('[OK] lxml')"
+          python -c "import requests; print('[OK] requests')"
+          python -c "import pytest; print('[OK] pytest')"
 
       - name: Vérification syntaxe des modules
         run: |
@@ -64,13 +64,13 @@ jobs:
           python -m py_compile main.py
           python -m py_compile utils/overlay_generator.py
           python -m py_compile utils/build_exe.py
-          echo "✓ Tous les fichiers Python sont valides"
+          echo "[OK] Tous les fichiers Python sont valides"
 
       - name: Test d'importation des modules principaux
         run: |
-          python -c "from main import VideoOverlayAutomator; print('✓ main.py OK')"
-          python -c "from utils.overlay_generator import PadelOverlayGenerator; print('✓ overlay_generator.py OK')"
-          echo "✓ Tous les modules s'importent correctement"
+          python -c "from main import VideoOverlayAutomator; print('[OK] main.py')"
+          python -c "from utils.overlay_generator import PadelOverlayGenerator; print('[OK] overlay_generator.py')"
+          echo "[OK] Tous les modules s'importent correctement"
 
       - name: Exécution des tests unitaires
         run: |
