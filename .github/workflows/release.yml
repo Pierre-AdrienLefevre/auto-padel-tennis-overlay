@@ -106,22 +106,13 @@ jobs:
           echo "version_type=$VERSION_TYPE" >> $GITHUB_OUTPUT
           echo "last_version=$LAST_TAG" >> $GITHUB_OUTPUT
 
-      - name: Créer le tag Git
-        if: github.event_name == 'pull_request'
-        run: |
-          NEW_VERSION="${{ steps.get_version.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a v$NEW_VERSION -m "Release v$NEW_VERSION"
-          git push origin v$NEW_VERSION
-
       - name: Générer les notes de version
         id: changelog
         run: |
           VERSION="${{ steps.get_version.outputs.version }}"
 
-          # Trouver le tag précédent
-          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          # Utiliser la variable last_version déjà calculée pour éviter les problèmes de timing
+          PREV_TAG="${{ steps.get_version.outputs.last_version }}"
 
           echo "## 🎉 Padel Overlay Generator v$VERSION" > release_notes.md
           echo "" >> release_notes.md
