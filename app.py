@@ -20,7 +20,7 @@ from main import VideoOverlayAutomator
 
 # Version de l'application
 APP_VERSION = "0.8.0"
-GITHUB_REPO = "Pierre-AdrienLefevre/auto-padel-tennis-overlay"  # À remplacer par votre repo GitHub
+GITHUB_REPO = "Pierre-AdrienLefevre/auto-padel-tennis-overlay"
 
 
 class UpdateChecker(QThread):

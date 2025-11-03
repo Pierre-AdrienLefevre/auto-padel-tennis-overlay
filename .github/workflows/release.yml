@@ -1,0 +1,170 @@
+name: Release Automatique
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Déclenché par des tags comme v1.0.0, v0.8.1, etc.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (ex: 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    name: Créer la Release GitHub
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Déterminer la version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Générer les notes de version
+        id: changelog
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+
+          # Trouver le tag précédent
+          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+
+          echo "## 🎉 Padel Overlay Generator v$VERSION" > release_notes.md
+          echo "" >> release_notes.md
+          echo "### 📥 Téléchargements" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **Windows**: \`PadelOverlayGenerator-Windows.exe\`" >> release_notes.md
+          echo "- **macOS**: \`PadelOverlayGenerator-macOS\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### 📝 Changements" >> release_notes.md
+          echo "" >> release_notes.md
+
+          if [ -n "$PREV_TAG" ]; then
+            git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" >> release_notes.md
+          else
+            git log --pretty=format:"- %s (%h)" --max-count=20 >> release_notes.md
+          fi
+
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### ⚙️ Configuration requise" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "- **FFmpeg** doit être installé sur votre système" >> release_notes.md
+          echo "- **Windows**: Windows 10/11 (64-bit)" >> release_notes.md
+          echo "- **macOS**: macOS 11+ (Big Sur ou plus récent)" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### 📖 Utilisation" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "1. Téléchargez l'exécutable correspondant à votre système" >> release_notes.md
+          echo "2. Installez FFmpeg si ce n'est pas déjà fait" >> release_notes.md
+          echo "3. Lancez l'application" >> release_notes.md
+          echo "4. Sélectionnez vos fichiers (XML, Excel, vidéos)" >> release_notes.md
+          echo "5. Cliquez sur \"Générer la vidéo avec overlays\"" >> release_notes.md
+
+          cat release_notes.md
+
+      - name: Créer la Release GitHub
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: Version ${{ steps.get_version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-and-upload:
+    name: Build et Upload ${{ matrix.os }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: PadelOverlayGenerator-Windows.exe
+            build_name: PadelOverlayGenerator.exe
+            asset_content_type: application/vnd.microsoft.portable-executable
+          - os: macos-latest
+            artifact_name: PadelOverlayGenerator-macOS
+            build_name: PadelOverlayGenerator
+            asset_content_type: application/octet-stream
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Installation de FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+
+      - name: Installation de FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Installation des dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build avec PyInstaller
+        run: python build_exe.py
+
+      - name: Renommer et préparer l'exécutable
+        shell: bash
+        run: |
+          cd dist
+          mv "${{ matrix.build_name }}" "${{ matrix.artifact_name }}"
+          ls -lh
+
+          # Calculer le checksum
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            certutil -hashfile "${{ matrix.artifact_name }}" SHA256 > "${{ matrix.artifact_name }}.sha256"
+          else
+            shasum -a 256 "${{ matrix.artifact_name }}" > "${{ matrix.artifact_name }}.sha256"
+          fi
+
+      - name: Upload de l'exécutable vers la Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.create-release.outputs.version }}
+          files: |
+            dist/${{ matrix.artifact_name }}
+            dist/${{ matrix.artifact_name }}.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Résumé
+        run: |
+          echo "### ✅ Build et Upload réussis - ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ needs.create-release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact:** ${{ matrix.artifact_name }}" >> $GITHUB_STEP_SUMMARY
+        shell: bash

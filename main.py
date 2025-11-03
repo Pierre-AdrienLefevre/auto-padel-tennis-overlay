@@ -15,7 +15,7 @@ from pathlib import Path
 
 import openpyxl
 
-from overlay_generator import PadelOverlayGenerator
+from utils.overlay_generator import PadelOverlayGenerator
 
 
 class VideoOverlayAutomator:

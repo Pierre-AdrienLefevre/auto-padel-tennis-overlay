@@ -1,0 +1,98 @@
+name: Build Exécutables
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: PadelOverlayGenerator-Windows.exe
+            build_name: PadelOverlayGenerator.exe
+          - os: macos-latest
+            artifact_name: PadelOverlayGenerator-macOS
+            build_name: PadelOverlayGenerator
+
+    steps:
+      - name: Checkout du code
+        uses: actions/checkout@v4
+
+      - name: Installation de Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Installation de FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+
+      - name: Installation de FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Cache des dépendances pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-build-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-build-
+
+      - name: Installation des dépendances
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build avec PyInstaller (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          python build_exe.py
+
+      - name: Build avec PyInstaller (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          python build_exe.py
+
+      - name: Vérifier les fichiers générés
+        shell: bash
+        run: |
+          echo "Contenu du dossier dist:"
+          ls -lh dist/
+          if [ -f "dist/${{ matrix.build_name }}" ]; then
+            echo "✓ Exécutable trouvé: ${{ matrix.build_name }}"
+          else
+            echo "❌ Exécutable non trouvé!"
+            exit 1
+          fi
+
+      - name: Renommer l'exécutable
+        shell: bash
+        run: |
+          cd dist
+          mv "${{ matrix.build_name }}" "${{ matrix.artifact_name }}"
+          ls -lh
+
+      - name: Upload de l'exécutable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}
+          retention-days: 30
+
+      - name: Résumé du build
+        run: |
+          echo "### ✅ Build réussi - ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact:** ${{ matrix.artifact_name }}" >> $GITHUB_STEP_SUMMARY
+        shell: bash
