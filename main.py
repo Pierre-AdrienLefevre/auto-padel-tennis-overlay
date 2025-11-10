@@ -29,10 +29,12 @@ class VideoOverlayAutomator:
         self.clips = []
         self.scores = []
         self.encoder = self.detect_gpu_encoder()
-        self.overlay_generator = PadelOverlayGenerator()
+        self.overlay_generator = None  # Sera initialisé après détection de la résolution
         self.team1_names = team1_names
         self.team2_names = team2_names
         self.debug = debug
+        self.video_width = None
+        self.video_height = None
 
         # Configurer le logging
         if self.debug:
@@ -204,6 +206,22 @@ class VideoOverlayAutomator:
 
         raise FileNotFoundError(f"Video file not found: {clip_name}")
 
+    def get_video_resolution(self, video_file):
+        """Détecte la résolution de la vidéo source (largeur x hauteur)."""
+        try:
+            result = subprocess.run(
+                ['ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                 '-show_entries', 'stream=width,height', '-of', 'csv=s=x:p=0',
+                 video_file],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                width, height = map(int, result.stdout.strip().split('x'))
+                return width, height
+        except:
+            pass
+        return None, None
+
     def get_video_bitrate(self, video_file):
         """Extrait le bitrate de la vidéo source."""
         try:
@@ -372,16 +390,34 @@ class VideoOverlayAutomator:
         print(f"\n🎬 Starting video processing...")
         total_start_time = time.time()
 
-        # Détecter le bitrate de la première vidéo source
+        # Détecter la résolution et le bitrate de la première vidéo source
         original_bitrate = None
         if self.clips:
             try:
                 first_video = self.find_video_file(self.clips[0]['name'])
+
+                # Détecter la résolution
+                if not self.video_width or not self.video_height:
+                    self.video_width, self.video_height = self.get_video_resolution(first_video)
+                    if self.video_width and self.video_height:
+                        print(f"📐 Résolution détectée: {self.video_width}x{self.video_height}")
+                        # Initialiser le générateur d'overlay avec la bonne résolution
+                        self.overlay_generator = PadelOverlayGenerator(self.video_width, self.video_height)
+                    else:
+                        # Fallback: 4K par défaut
+                        print(f"⚠️  Résolution non détectée, utilisation de 4K par défaut")
+                        self.video_width, self.video_height = 3840, 2160
+                        self.overlay_generator = PadelOverlayGenerator(self.video_width, self.video_height)
+
+                # Détecter le bitrate
                 original_bitrate = self.get_video_bitrate(first_video)
                 if original_bitrate:
                     print(f"📊 Bitrate original détecté: {original_bitrate:.1f} Mbps")
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️  Erreur lors de la détection: {e}")
+                # Fallback: 4K par défaut
+                self.video_width, self.video_height = 3840, 2160
+                self.overlay_generator = PadelOverlayGenerator(self.video_width, self.video_height)
 
         # Créer un dossier temporaire pour les segments
         with tempfile.TemporaryDirectory() as temp_dir:

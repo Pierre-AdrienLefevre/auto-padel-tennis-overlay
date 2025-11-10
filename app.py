@@ -88,12 +88,15 @@ class VideoProcessThread(QThread):
     progress_detail = pyqtSignal(int, int, str)  # current, total, time_remaining
     finished = pyqtSignal(bool, str)  # success, message
 
-    def __init__(self, xml_path, excel_path, video_folder, output_path):
+    def __init__(self, xml_path, excel_path, video_folder, output_path, team1_names="LÉO / YANNOUCK",
+                 team2_names="BILAL / PIERRE"):
         super().__init__()
         self.xml_path = xml_path
         self.excel_path = excel_path
         self.video_folder = video_folder
         self.output_path = output_path
+        self.team1_names = team1_names
+        self.team2_names = team2_names
 
     def run(self):
         try:
@@ -103,7 +106,9 @@ class VideoProcessThread(QThread):
             automator = VideoOverlayAutomator(
                 self.xml_path,
                 self.excel_path,
-                self.video_folder
+                self.video_folder,
+                team1_names=self.team1_names,
+                team2_names=self.team2_names
             )
 
             self.progress.emit("Parsing des fichiers...")
@@ -251,8 +256,38 @@ class PadelOverlayApp(QMainWindow):
         files_group.setLayout(files_layout)
         main_layout.addWidget(files_group)
 
+        # Section: Noms des équipes
+        teams_group = QGroupBox("2. Noms des équipes")
+        teams_layout = QVBoxLayout()
+
+        # Équipe 1
+        team1_layout = QHBoxLayout()
+        team1_layout.addWidget(QLabel("Équipe 1:"))
+        self.team1_input = QLineEdit()
+        self.team1_input.setPlaceholderText("Exemple: LÉO / YANNOUCK")
+        self.team1_input.setText("LÉO / YANNOUCK")
+        team1_layout.addWidget(self.team1_input)
+        teams_layout.addLayout(team1_layout)
+
+        # Équipe 2
+        team2_layout = QHBoxLayout()
+        team2_layout.addWidget(QLabel("Équipe 2:"))
+        self.team2_input = QLineEdit()
+        self.team2_input.setPlaceholderText("Exemple: BILAL / PIERRE")
+        self.team2_input.setText("BILAL / PIERRE")
+        team2_layout.addWidget(self.team2_input)
+        teams_layout.addLayout(team2_layout)
+
+        # Note d'information
+        info_label = QLabel("ℹ️ Format: JOUEUR1 / JOUEUR2 (séparés par un slash)")
+        info_label.setStyleSheet("color: #666; font-size: 11px; font-style: italic;")
+        teams_layout.addWidget(info_label)
+
+        teams_group.setLayout(teams_layout)
+        main_layout.addWidget(teams_group)
+
         # Section: Traitement
-        process_group = QGroupBox("2. Génération")
+        process_group = QGroupBox("3. Génération")
         process_layout = QVBoxLayout()
 
         # Bouton de génération
@@ -421,6 +456,10 @@ class PadelOverlayApp(QMainWindow):
 
         output = self.output_input.text() or "output_final.mp4"
 
+        # Récupérer les noms des équipes
+        team1_names = self.team1_input.text() or "LÉO / YANNOUCK"
+        team2_names = self.team2_input.text() or "BILAL / PIERRE"
+
         # Désactiver le bouton
         self.generate_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
@@ -431,13 +470,17 @@ class PadelOverlayApp(QMainWindow):
         self.log("\n" + "=" * 50)
         self.log("DÉMARRAGE DU TRAITEMENT")
         self.log("=" * 50)
+        self.log(f"Équipe 1: {team1_names}")
+        self.log(f"Équipe 2: {team2_names}")
 
         # Lancer le thread de traitement
         self.process_thread = VideoProcessThread(
             self.xml_path,
             self.excel_path,
             self.video_folder,
-            output
+            output,
+            team1_names,
+            team2_names
         )
         self.process_thread.progress.connect(self.log)
         self.process_thread.progress_percent.connect(self.update_progress)
