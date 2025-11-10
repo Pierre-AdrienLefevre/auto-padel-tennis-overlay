@@ -156,3 +156,41 @@ class TestPadelOverlayGenerator:
 
         assert result == str(output_path)
         assert output_path.exists()
+
+    def test_scale_factor_4k(self):
+        """Test du facteur d'échelle pour 4K (référence = 1.0)."""
+        gen = PadelOverlayGenerator(width=3840, height=2160)
+        assert gen.scale_factor == 1.0
+
+    def test_scale_factor_1080p(self):
+        """Test du facteur d'échelle pour 1080p (0.5x)."""
+        gen = PadelOverlayGenerator(width=1920, height=1080)
+        assert gen.scale_factor == 0.5
+
+    def test_scale_factor_720p(self):
+        """Test du facteur d'échelle pour 720p (~0.33x)."""
+        gen = PadelOverlayGenerator(width=1280, height=720)
+        expected_scale = min(1280 / 3840, 720 / 2160)  # ~0.333
+        assert abs(gen.scale_factor - expected_scale) < 0.001
+
+    def test_dimensions_scale_with_resolution(self):
+        """Test que les dimensions s'adaptent à la résolution."""
+        gen_4k = PadelOverlayGenerator(width=3840, height=2160)
+        gen_1080p = PadelOverlayGenerator(width=1920, height=1080)
+
+        # Vérifier que les dimensions 1080p sont environ la moitié de la 4K
+        assert gen_1080p.names_width == gen_4k.names_width // 2
+        assert gen_1080p.games_width == gen_4k.games_width // 2
+        assert gen_1080p.total_height == gen_4k.total_height // 2
+
+    def test_overlay_size_matches_resolution(self):
+        """Test que les overlays générés ont la bonne taille."""
+        # Test 1080p
+        gen_1080p = PadelOverlayGenerator(width=1920, height=1080)
+        overlay_1080p = gen_1080p.create_overlay()
+        assert overlay_1080p.size == (1920, 1080)
+
+        # Test 720p
+        gen_720p = PadelOverlayGenerator(width=1280, height=720)
+        overlay_720p = gen_720p.create_overlay()
+        assert overlay_720p.size == (1280, 720)

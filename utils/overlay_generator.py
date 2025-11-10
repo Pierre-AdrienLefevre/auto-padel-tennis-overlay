@@ -5,7 +5,6 @@ Style basé sur l'exemple Overlay_précis2.png
 """
 
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from pathlib import Path
 
 
 class PadelOverlayGenerator:
@@ -22,6 +21,10 @@ class PadelOverlayGenerator:
         self.width = width
         self.height = height
 
+        # Calculer le facteur d'échelle basé sur la résolution (4K = référence)
+        # Supporte: 720p, 1080p, 1440p, 4K, et résolutions personnalisées
+        self.scale_factor = min(width / 3840, height / 2160)
+
         # Couleurs (basées sur les exemples précis)
         self.color_bg_teams = (37, 66, 94, 255)      # Bleu marine (plus proche des exemples)
         self.color_bg_games = (210, 210, 210, 255)   # Gris clair
@@ -31,26 +34,27 @@ class PadelOverlayGenerator:
         self.color_separator = (255, 255, 255, 180)  # Blanc semi-transparent
         self.color_shadow = (0, 0, 0, 100)           # Ombre noire semi-transparente
 
-        # Dimensions du scoreboard (pour 4K, basé sur les exemples)
-        self.x_offset = 50  # Distance du bord gauche (plus près du bord)
-        self.y_offset_from_bottom = 250  # Distance du bord du bas
-        self.total_height = 400  # Hauteur totale réduite
+        # Dimensions du scoreboard (référence 4K, puis mis à l'échelle)
+        # Toutes les dimensions sont multipliées par scale_factor
+        self.x_offset = int(50 * self.scale_factor)  # Distance du bord gauche
+        self.y_offset_from_bottom = int(250 * self.scale_factor)  # Distance du bord du bas
+        self.total_height = int(400 * self.scale_factor)  # Hauteur totale
 
         # Hauteur de chaque ligne
-        self.row_height = 200
+        self.row_height = int(200 * self.scale_factor)
 
-        # Largeurs des colonnes (x2 pour 4K, ajustées selon exemples)
-        self.names_width = 1100  # Plus large pour les noms
-        self.games_width = 350   # Plus large pour les jeux
-        self.points_width = 400  # Plus large pour les points
-        self.set_width = 350     # Largeur pour les colonnes de sets
+        # Largeurs des colonnes (référence 4K, puis mis à l'échelle)
+        self.names_width = int(1100 * self.scale_factor)  # Largeur pour les noms
+        self.games_width = int(350 * self.scale_factor)  # Largeur pour les jeux
+        self.points_width = int(400 * self.scale_factor)  # Largeur pour les points
+        self.set_width = int(350 * self.scale_factor)  # Largeur pour les colonnes de sets
 
-        self.border_radius = 50  # Coins plus arrondis
-        self.spacing = 30  # Espacement plus large entre les sections
+        self.border_radius = int(50 * self.scale_factor)  # Coins arrondis
+        self.spacing = int(30 * self.scale_factor)  # Espacement entre les sections
 
         # Ombre portée
-        self.shadow_offset = 8
-        self.shadow_blur = 15
+        self.shadow_offset = int(8 * self.scale_factor)
+        self.shadow_blur = int(15 * self.scale_factor)
 
     def load_fonts(self):
         """Charge les polices système (avec fallback multi-plateforme)."""
@@ -70,15 +74,15 @@ class PadelOverlayGenerator:
         font_games = None
         font_points = None
 
-        # Essayer de charger les polices
+        # Essayer de charger les polices (tailles adaptées à la résolution)
         for font_path in font_paths_bold:
             try:
                 # Police pour les noms d'équipes (taille augmentée, bold)
-                font_team = ImageFont.truetype(font_path, 70)
+                font_team = ImageFont.truetype(font_path, int(70 * self.scale_factor))
                 # Police pour les jeux (chiffres noirs, plus gros, bold)
-                font_games = ImageFont.truetype(font_path, 140)
+                font_games = ImageFont.truetype(font_path, int(140 * self.scale_factor))
                 # Police pour les points (chiffres blancs, très gros, bold)
-                font_points = ImageFont.truetype(font_path, 130)
+                font_points = ImageFont.truetype(font_path, int(130 * self.scale_factor))
                 break
             except Exception:
                 continue
