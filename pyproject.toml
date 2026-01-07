@@ -5,22 +5,22 @@ description = "Padel Video Overlay Generator - Application de génération autom
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "lxml>=6.0.2",
-    "openpyxl>=3.1.5",
-    "pillow>=12.0",
-    "pyinstaller>=6.16.0",
-    "pyqt6>=6.10.0",
-    "requests>=2.32.5",
+    "lxml~=6.0.2",
+    "openpyxl~=3.1.5",
+    "pillow~=12.1",
+    "pyinstaller~=6.17.0",
+    "pyqt6~=6.10.1",
+    "requests~=2.32.5",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.0",
-    "pytest-cov>=4.1.0",
+    "pytest~=9.0.2",
+    "pytest-cov~=7.0.0",
 ]
 
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools~=80.9"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
